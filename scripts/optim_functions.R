@@ -1,0 +1,115 @@
+#' Run PCLake management pathway with modified model parameters
+#'
+#' @param val_pars values of the pathway parameters
+#' @param name_pars names of the pathway parameters
+#'
+#' @returns a dataframe of PCLake output as defined in the DATM file
+#' @export
+#'
+#' @examples
+ 
+run_pathway <- function(val_pars, name_pars) {
+  
+  # For debugging ----------------- #
+  # val_pars <- lower_bound
+  # name_pars <- names(lower_bound)
+  # future_states <- desired_states #
+  #--------------------------------#
+  
+  # Setting parameter values -----------#
+  lDATM_SETTINGS_obj <- lDATM_SETTINGS
+  lag_pars_lag <- grep('_lag', name_pars) # these are model parameters with lags - take these out
+  lag_pars <- which(name_pars %in% gsub('_lag', '', name_pars[lag_pars_lag]))
+  
+  
+  lDATM_SETTINGS_obj$params[name_pars[-c(lag_pars, lag_pars_lag)], "sDefault0"] <- val_pars[-c(lag_pars, lag_pars_lag)]
+  
+  
+  # set the lagged variables via the forcings in the DATM file
+  # extract lagged variable 
+  # NOTE: this  only works if there is already something in the forcings and you are just modifying it
+  # otherwise you have to recompile the model
+  
+  if (length(lag_pars_lag) > 0) {
+    for (i in lag_pars) {
+      forcing_df <- data.frame(time = 0:(lDATM_SETTINGS_obj$run_settings["dReady", "Set0"]*365)) |> 
+        mutate(value = current_val[name_pars[i]]) |> # set with a unchanged/current loading)
+        mutate(value = ifelse(time %in% 0:(val_pars[lag_pars_lag]*365),
+                              value,
+                              val_pars[name_pars[i]])) # the values after the first lag are reduced to the parameter value
+      
+      lDATM_SETTINGS_obj$forcings$sDefault0[[gsub(pattern = '_lag', '',name_pars[i])]] <- forcing_df
+      
+    }
+  }
+  
+  
+  # Initialise and run model with these parameters
+  # InitStates_01 <- PCModelInitializeModel(lDATM = lDATM_SETTINGS_obj,
+  #                                         dirSHELL = dirShell,
+  #                                         nameWORKCASE = nameWorkCase)
+  
+  PCModel_run <- PCmodelSingleRun(lDATM = lDATM_SETTINGS_obj,
+                                  nRUN_SET = 0,
+                                  dfSTATES = equilibrium_states,
+                                  integrator_method = "rk45ck",
+                                  dirHOME = dirHome,
+                                  nameWORKCASE = nameWorkCase)
+  return(PCModel_run)
+  
+}
+
+
+#' Evaluate a parameter pathway
+#'
+#' @param PCLake_output output from run_pathway
+#' @param future_states dataframe of variable and target value
+#' @param eval_target how should the target be evaluated, function to call
+#' @param eval_days which days in the last year should be evaluated
+#'
+#' @returns numeric value output from eval_target function call
+#' @export
+#'
+#' @examples
+evaluate_pathway <- function(PCLake_output, 
+                             future_states,
+                             eval_target = function(x,y){abs(x-y)/y},
+                             eval_days = 121:244) {
+  
+  # For debugging ----------------- #
+  # PCLake_output, 
+  # future_states, 
+  # eval_target = function(x,y){(x-y)/y}
+  # eval_days = 121:244
+  #--------------------------------#
+  
+  if (sum(!future_states$variable %in% colnames(PCLake_output)) > 0) {
+    stop("PCLake output doesn't contain the evaluation variables from the future states")
+  }
+  
+  # Extract model output and compare with desired state
+  model_output <- PCLake_output |>
+    mutate(year = floor((time-1)/365) + 1,
+           doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
+    filter(year == max(year), # filters to summer in the last year of the simulation
+           doy %in% eval_days) |> 
+    select(future_states$variable) |> 
+    summarise(across(all_of(future_states$variable), mean)) |> 
+    pivot_longer(cols = any_of(future_states$variable),
+                 names_to = 'variable',
+                 values_to = 'output')
+  
+  
+  pathway_error <- model_output |> 
+    full_join(future_states, by = 'variable') |> 
+    mutate(diff = eval_target(x = output, 
+                              y = target)) |> #output-target)/target) |>
+    summarise(total_error = sum(diff)) 
+  
+  
+  print(model_output)
+  
+  out_val <- pathway_error |> pull(total_error)
+  return(out_val)
+  
+}
