@@ -27,7 +27,7 @@ dirHome <- str_split(project_location,  "(?=PCModel1350)", simplify = T)[1,1]	# 
 dirShell <- str_split(project_location,  "(?<=PCShell)", simplify = T)[1,1]	#  PCShell folder path
 dirCpp_root <- list.dirs(dirHome)[which(str_detect(list.dirs(dirHome),"3.01/PCLake_plus"))] # location of C++ code
 nameWorkCase <- tail(str_split_1(project_location, "/"), n = 1) # workcase name
-fileDATM <- list.files(list.dirs(dirHome)[which(str_detect(list.dirs(dirHome), "PCLake\\+/6.13.16"))], "PL613162PLUS_optimisation.xls", full.names = T)
+fileDATM <- list.files(list.dirs(dirHome)[which(str_detect(list.dirs(dirHome), "PCLake\\+/6.13.16"))], "PL613162PLUS_pathway_optim.xls", full.names = T)
 folderTXT <- file.path(project_location, 'input', 'drivers_txt')
 dirSave <- dirShell
 # ----------------------------------------------------------------------------- #
@@ -64,8 +64,13 @@ lDATM_SETTINGS <- PCModelReadDATMFile_PCLakePlus(fileXLS = fileDATM,
                                                  readAllForcings = F)
 ##----------------------------------------#
 
-## Modifications can be made to the DATM file here
+## Modifications can be made to the DATM file here! (those that need to be compiled)
 ## Might be a good idea to make sure the default lake parameters are loaded
+
+# Report restart variables
+restart_states <- read_table(file.path(project_location, 'restart_states.txt'), col_names = 'state', show_col_types = F)
+lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 1 # report these in the output
+
 
 ## 3.4. Make and adjust cpp files ----------       
 #  - nRUN_SET determines which forcings are switched on
@@ -81,7 +86,22 @@ PCModelCompileModelWorkCase(dirSHELL = dirShell,
 ##----------------------------------------#
 
 
-# If we assume at this point that the model has been run to an equilibrium that we want to optimise
+# Run the model to an equilibrium before starting the optimisation
+InitStates_baseline <- PCModelInitializeModel(lDATM = lDATM_SETTINGS,
+                                              dirSHELL = dirShell,
+                                              nameWORKCASE = nameWorkCase)
+
+PCModel_run_baseline <- PCmodelSingleRun(lDATM = lDATM_SETTINGS,
+                                         nRUN_SET = 0,
+                                         dfSTATES = InitStates_baseline,
+                                         integrator_method = "rk45ck",
+                                         dirHOME = dirHome,
+                                         nameWORKCASE = nameWorkCase)
+
+
+# extract the restart variables from the end of the baseline run
+equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline, 
+                                   day =  lDATM_SETTINGS$run_settings['dReady','Set0'] * 365)
 
 
 ## 6. Run optimisation ---------------------------
@@ -109,6 +129,32 @@ current_val <- c('mPLoadEpi' = 0.005) # the "unchanged" P-loading (before the me
 desired_states <- data.frame(variable = c('oChlaEpi'),
                              target = c(20))
 
+
+## Update the DATM file and recompile the model ---------------
+# Report variables
+lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 0 # these can be turned off
+
+## 3.4. Make and adjust cpp files ----------       
+#  - nRUN_SET determines which forcings are switched on
+PCModelAdjustCPPfiles(dirSHELL = dirShell,
+                      nameWORKCASE = nameWorkCase,
+                      lDATM = lDATM_SETTINGS,
+                      nRUN_SET = 0)
+##----------------------------------------#
+
+## 5. Compile model -----------------------
+PCModelCompileModelWorkCase(dirSHELL = dirShell,
+                            nameWORKCASE = nameWorkCase)
+##----------------------------------------#
+
+# The copiled model needs to have all of the forcing variables in it (e.g. marsh area, P-loading)
+# otherwise the .dll and DATM file won't match
+
+
+
+
+
+
 ### c. Define the objective function -----------------
 # 1) run model
 # 2) extract output
@@ -133,29 +179,31 @@ optimise_pathway <- function(val_pars, name_pars, future_states) {
   
   # set the lagged variables via the forcings in the DATM file
   # extract lagged variable 
-  # NOTE: this currently only works if there is already something in the forcings and you are just modifying it
-  if (length(lag_pars) > 0) {
+  # NOTE: this  only works if there is already something in the forcings and you are just modifying it
+  # otherwise you have to recompile the model
+  
+  if (length(lag_pars_lag) > 0) {
     for (i in lag_pars) {
-      forcing_df <- data.frame(time = 0:(lDATM_SETTINGS_obj$run_settings["dReady","Set0"]*365)) |> 
+      forcing_df <- data.frame(time = 0:(lDATM_SETTINGS_obj$run_settings["dReady", "Set0"]*365)) |> 
         mutate(value = current_val[name_pars[i]]) |> # set with a unchanged/current loading)
-        mutate(value = ifelse(time %in% 0:(val_pars[paste0(name_pars[i], '_lag')]*365), 
-                              value, 
+        mutate(value = ifelse(time %in% 0:(val_pars[lag_pars_lag]*365),
+                              value,
                               val_pars[name_pars[i]])) # the values after the first lag are reduced to the parameter value
       
-      lDATM_SETTINGS_obj$forcings$sDefault0[[name_pars[i]]] <- forcing_df
-
+      lDATM_SETTINGS_obj$forcings$sDefault0[[gsub(pattern = '_lag', '',name_pars[i])]] <- forcing_df
+      
     }
   }
   
   
   # Initialise and run model with these parameters
-  InitStates_01 <- PCModelInitializeModel(lDATM = lDATM_SETTINGS_obj,
-                                          dirSHELL = dirShell,
-                                          nameWORKCASE = nameWorkCase)
+  # InitStates_01 <- PCModelInitializeModel(lDATM = lDATM_SETTINGS_obj,
+  #                                         dirSHELL = dirShell,
+  #                                         nameWORKCASE = nameWorkCase)
   
   PCModel_run <- PCmodelSingleRun(lDATM = lDATM_SETTINGS_obj,
                                   nRUN_SET = 0,
-                                  dfSTATES = InitStates_01,
+                                  dfSTATES = equilibrium_states,
                                   integrator_method = "rk45ck",
                                   dirHOME = dirHome,
                                   nameWORKCASE = nameWorkCase)
@@ -164,7 +212,7 @@ optimise_pathway <- function(val_pars, name_pars, future_states) {
   model_output <- PCModel_run |>
     mutate(year = floor((time-1)/365) + 1,
            doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
-    filter(year == 10,
+    filter(year == max(year), # filters to summer in the last year of the simulation
            doy %in% 121:244) |> 
     select(future_states$variable) |> 
     summarise(across(any_of(future_states$variable), mean)) |> 
@@ -175,7 +223,6 @@ optimise_pathway <- function(val_pars, name_pars, future_states) {
   pathway_error <- model_output |> 
     full_join(future_states, by = 'variable') |> 
     mutate(diff = (output-target)/target) |>
-    # mutate(diff = output) |> 
     summarise(total_error = sum(diff)) 
   
   print(val_pars)
@@ -187,11 +234,12 @@ optimise_pathway <- function(val_pars, name_pars, future_states) {
 
 
 ## Parallelization with FOREACH package
-{nC <- parallelly::availableCores() 
+{
+  nC <- parallelly::availableCores() 
   cl <- makeSOCKcluster(nC-2)
   clusterEvalQ(cl, library(tidyverse))
   clusterEvalQ(cl, library(deSolve))
-  clusterExport(cl, list("lDATM_SETTINGS", 'current_val', 
+  clusterExport(cl, list("lDATM_SETTINGS", 'current_val', 'equilibrium_states',
                          "PCModelInitializeModel", "dirShell", "nameWorkCase", 'dirHome',
                          "PCmodelSingleRun", "RunModel"))
   
@@ -202,8 +250,8 @@ optimise_pathway <- function(val_pars, name_pars, future_states) {
                           F = 0.80, 
                           trace = TRUE,
                           itermax = 50, 
-                          # reltol = 0.001, 
-                          # steptol = 5, 
+                          reltol = 0.001, 
+                          steptol = 5, 
                           #c = 0.05, strategy = 6, p = 0.10,
                           c = 0.25, strategy = 6, p = 0.40, 
                           storepopfrom = 0,
@@ -217,7 +265,8 @@ optimise_pathway <- function(val_pars, name_pars, future_states) {
                                   name_pars = names(lower_bound),
                                   future_states = desired_states)
   
-  parallel::stopCluster(cl)}
+  parallel::stopCluster(cl)
+}
 
 # iteration is a generation of a population
 # one population is a collection of members
@@ -270,7 +319,7 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
 last_iteration |> 
   slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
   ggplot(aes(x=fMarsh, y= mPLoadEpi_lag, size = mPLoadEpi, colour = fn_out)) + 
-  geom_point() + 
-  scale_colour_viridis_c() +
+  geom_point(alpha = 0.5) + 
+  scale_colour_gradient2() +
   coord_cartesian(xlim = c(0,0.2), 
                   ylim = c(1,5))
