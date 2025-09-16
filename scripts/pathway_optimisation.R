@@ -159,8 +159,16 @@ PCModelCompileModelWorkCase(dirSHELL = dirShell,
 # 1) run model
 # 2) extract output
 # 3) return a minimised value by comparing with desired future (DEOptim will make the value as negative as possible)
+source(file.path(project_location, "scripts/optim_functions.R"))
 
 obj_function <- function(val_pars, name_pars, future_states) {
+  
+  # For debugging ----------------- #
+  # val_pars <- lower_bound
+  # name_pars <- names(lower_bound)
+  # future_states <- desired_states #
+  #--------------------------------#
+  
   model_output <- run_pathway(val_pars,
                               name_pars)
   
@@ -181,7 +189,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
   clusterEvalQ(cl, library(deSolve))
   clusterExport(cl, list("lDATM_SETTINGS", 'current_val', 'equilibrium_states',
                          "PCModelInitializeModel", "dirShell", "nameWorkCase", 'dirHome',
-                         "PCmodelSingleRun", "RunModel"))
+                         "PCmodelSingleRun", "RunModel", "run_pathway", "evaluate_pathway"))
   
   doSNOW::registerDoSNOW(cl)
   
@@ -253,7 +261,7 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                    name_pars <- last_iteration[i,] |> 
                                      select(-runID) |> names()
                                    
-                                   save <- optimise_pathway(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
+                                   save <- obj_function(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
                                  }
 
 last_iteration |> 
