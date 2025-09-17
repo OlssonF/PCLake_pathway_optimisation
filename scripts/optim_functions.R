@@ -31,14 +31,18 @@ run_pathway <- function(val_pars, name_pars) {
   # otherwise you have to recompile the model
   
   if (length(lag_pars_lag) > 0) {
-    for (i in lag_pars) {
-      forcing_df <- data.frame(time = 0:(lDATM_SETTINGS_obj$run_settings["dReady", "Set0"]*365)) |> 
-        mutate(value = current_val[name_pars[i]]) |> # set with a unchanged/current loading)
-        mutate(value = ifelse(time %in% 0:(val_pars[lag_pars_lag]*365),
-                              value,
-                              val_pars[name_pars[i]])) # the values after the first lag are reduced to the parameter value
+    for (i in 1:length(lag_pars)) {
       
-      lDATM_SETTINGS_obj$forcings$sDefault0[[gsub(pattern = '_lag', '',name_pars[i])]] <- forcing_df
+      name1 <- name_pars[lag_pars[i]]
+      name2 <- name_pars[lag_pars_lag[i]]
+      
+      forcing_df <- data.frame(time = 0:(lDATM_SETTINGS_obj$run_settings["dReady", "Set0"]*365)) |> 
+        mutate(value = current_val[name1]) |> # set with a unchanged/current loading)
+        mutate(value = ifelse(time %in% 0:(val_pars[which(name_pars == name2)]*365),
+                              value,
+                              val_pars[which(name_pars == name1)])) # the values after the first lag are reduced to the parameter value
+      
+      lDATM_SETTINGS_obj$forcings$sDefault0[[name1]] <- forcing_df
       
     }
   }
@@ -77,8 +81,8 @@ evaluate_pathway <- function(PCLake_output,
                              eval_days = 121:244) {
   
   # For debugging ----------------- #
-  # PCLake_output, 
-  # future_states, 
+  # PCLake_output = PCModel_run
+  # future_states
   # eval_target = function(x,y){(x-y)/y}
   # eval_days = 121:244
   #--------------------------------#
@@ -94,7 +98,7 @@ evaluate_pathway <- function(PCLake_output,
     filter(year == max(year), # filters to summer in the last year of the simulation
            doy %in% eval_days) |> 
     select(future_states$variable) |> 
-    summarise(across(all_of(future_states$variable), mean)) |> 
+    summarise(across(any_of(future_states$variable), mean)) |> 
     pivot_longer(cols = any_of(future_states$variable),
                  names_to = 'variable',
                  values_to = 'output')
@@ -102,12 +106,10 @@ evaluate_pathway <- function(PCLake_output,
   
   pathway_error <- model_output |> 
     full_join(future_states, by = 'variable') |> 
-    mutate(diff = eval_target(x = output, 
-                              y = target)) |> #output-target)/target) |>
+    mutate(diff = eval_target(output, target)) |> # |> eval_target(x = output,     y = target)
     summarise(total_error = sum(diff)) 
   
-  
-  print(model_output)
+  # print(model_output)
   
   out_val <- pathway_error |> pull(total_error)
   return(out_val)
