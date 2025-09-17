@@ -111,10 +111,12 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 
 # Define the parameter values to be optimised
 lower_bound <- c('mPLoadEpi' = 0.001, #minimum Ploading
-                 'mPLoadEpi_lag' = 1, # need at least a year?
+                 'mPLoadEpi_lag' = 1,
+                 'fMarsh_lag' = 1, # need at least a year?
                  'fMarsh' = 0) # fraction of marsh area relative to lake
-upper_bound <- c('mPLoadEpi' = 0.01, 
-                 'mPLoadEpi_lag' = 5*1, # could be at least 5 year lag
+upper_bound <- c('mPLoadEpi' = 0.01,
+                 'mPLoadEpi_lag' = 10,
+                 'fMarsh_lag' = 5*1, # could be at least 5 year lag
                  'fMarsh' = 0.2) 
 
 # error_pars <- c('mPLoadEpi' = 0.0005531256, #minimum Ploading
@@ -123,7 +125,8 @@ upper_bound <- c('mPLoadEpi' = 0.01,
 
 ### b. Define the desired future ------------------
 # What is the objective
-current_val <- c('mPLoadEpi' = 0.005) # the "unchanged" P-loading (before the measure is in place) - could also be a timeseries I guess?
+current_val <- c('mPLoadEpi' = 0.05,
+                 'fMarsh' = 0) # the "unchanged" value (before the measure is in place) - could also be a timeseries I guess?
 
 # Define the desired future state(s)
 desired_states <- data.frame(variable = c('oChlaEpi'),
@@ -133,6 +136,20 @@ desired_states <- data.frame(variable = c('oChlaEpi'),
 ## Update the DATM file and recompile the model ---------------
 # Report variables
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 0 # these can be turned off
+
+# forcing variables --------------
+# anything that is being lagged needs to be in the forcings before compilation
+for (i in names(lower_bound)) {
+  lag_var <- gsub('_lag', '', i)
+  if (str_detect(i, '_lag') & is.null(lDATM_SETTINGS$forcings$sDefault0[[lag_var]])) {
+   
+    
+    lDATM_SETTINGS$forcings$sDefault0[[lag_var]] <- data.frame(time = 0:(lDATM_SETTINGS$run_settings["dReady", "Set0"]*365),
+                                                       value = -99999) 
+    message('adding ', lag_var, ' forcing')
+  }
+}
+
 
 ## 3.4. Make and adjust cpp files ----------       
 #  - nRUN_SET determines which forcings are switched on
@@ -164,13 +181,12 @@ source(file.path(project_location, "scripts/optim_functions.R"))
 obj_function <- function(val_pars, name_pars, future_states) {
   
   # For debugging ----------------- #
-  # val_pars <- lower_bound
+  # val_pars <- upper_bound
   # name_pars <- names(lower_bound)
   # future_states <- desired_states #
   #--------------------------------#
   
-  model_output <- run_pathway(val_pars,
-                              name_pars)
+  model_output <- run_pathway(val_pars, name_pars)
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
@@ -188,8 +204,9 @@ obj_function <- function(val_pars, name_pars, future_states) {
   clusterEvalQ(cl, library(tidyverse))
   clusterEvalQ(cl, library(deSolve))
   clusterExport(cl, list("lDATM_SETTINGS", 'current_val', 'equilibrium_states',
-                         "PCModelInitializeModel", "dirShell", "nameWorkCase", 'dirHome',
-                         "PCmodelSingleRun", "RunModel", "run_pathway", "evaluate_pathway"))
+                         # "PCModelInitializeModel", 
+                         "dirShell", "nameWorkCase", 'dirHome',
+                         "PCmodelSingleRun", "RunModel", 'run_pathway', 'evaluate_pathway'))
   
   doSNOW::registerDoSNOW(cl)
   
@@ -197,18 +214,20 @@ obj_function <- function(val_pars, name_pars, future_states) {
                           CR = 0.9,
                           F = 0.80, 
                           trace = TRUE,
-                          itermax = 50, 
+                          itermax = 20, 
                           reltol = 0.001, 
                           steptol = 5, 
                           #c = 0.05, strategy = 6, p = 0.10,
                           c = 0.25, strategy = 6, p = 0.40, 
                           storepopfrom = 0,
-                          parallelType = 'foreach')   
+                          parallelType = 'foreach')
+  
+  
   set.seed(1234)
   
   opt_pathway <- DEoptim::DEoptim(lower = lower_bound,
                                   upper = upper_bound, 
-                                  fn = obj_function, 
+                                  fn = obj_function,
                                   control = deoptim_control, 
                                   name_pars = names(lower_bound),
                                   future_states = desired_states)
@@ -265,7 +284,7 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                  }
 
 last_iteration |> 
-  slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
+  # slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
   ggplot(aes(x=fMarsh, y= mPLoadEpi_lag, size = mPLoadEpi, colour = fn_out)) + 
   geom_point(alpha = 0.5) + 
   scale_colour_gradient2() +
