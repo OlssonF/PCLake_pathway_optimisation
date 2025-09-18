@@ -56,13 +56,14 @@ run_pathway <- function(val_pars, name_pars) {
   
   
   # Initialise and run model with these parameters
-  # InitStates_01 <- PCModelInitializeModel(lDATM = lDATM_SETTINGS_obj,
-  #                                         dirSHELL = dirShell,
-  #                                         nameWORKCASE = nameWorkCase)
+  lDATM_SETTINGS_obj$states[equilibrium_states$variable, "sDefaultSetTurbid0"] <- equilibrium_states$value # these are extracted from a equilibrium model run
+  InitStates_01 <- PCModelInitializeModel(lDATM = lDATM_SETTINGS_obj,
+                                          dirSHELL = dirShell,
+                                          nameWORKCASE = nameWorkCase)
   
   PCModel_run <- PCmodelSingleRun(lDATM = lDATM_SETTINGS_obj,
                                   nRUN_SET = 0,
-                                  dfSTATES = equilibrium_states,
+                                  dfSTATES = InitStates_01,
                                   integrator_method = "rk45ck",
                                   dirHOME = dirHome,
                                   nameWORKCASE = nameWorkCase)
