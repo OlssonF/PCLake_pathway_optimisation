@@ -111,11 +111,11 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 
 # Define the parameter values to be optimised
 lower_bound <- c('mPLoadEpi' = 0.001, #minimum Ploading
-                 'mPLoadEpi_lag' = 1,
+                 #'mPLoadEpi_lag' = 1,
                  'fMarsh_lag' = 1, # need at least a year?
                  'fMarsh' = 0) # fraction of marsh area relative to lake
 upper_bound <- c('mPLoadEpi' = 0.01,
-                 'mPLoadEpi_lag' = 10,
+                 #'mPLoadEpi_lag' = 10,
                  'fMarsh_lag' = 5*1, # could be at least 5 year lag
                  'fMarsh' = 0.2) 
 
@@ -129,23 +129,24 @@ current_val <- c('mPLoadEpi' = 0.05,
                  'fMarsh' = 0) # the "unchanged" value (before the measure is in place) - could also be a timeseries I guess?
 
 # Define the desired future state(s)
-desired_states <- data.frame(variable = c('oChlaEpi'),
-                             target = c(20))
+desired_states <- data.frame(variable = c('oChlaEpi', 'aSecchiT'),
+                             target = c(20, 0.5))
 
 
 ## Update the DATM file and recompile the model ---------------
 # Report variables
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 0 # these can be turned off
+lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% desired_states$variable)] <- 1 # report optim vars
 
 # forcing variables --------------
 # anything that is being lagged needs to be in the forcings before compilation
 for (i in names(lower_bound)) {
   lag_var <- gsub('_lag', '', i)
   if (str_detect(i, '_lag') & is.null(lDATM_SETTINGS$forcings$sDefault0[[lag_var]])) {
-   
+    
     
     lDATM_SETTINGS$forcings$sDefault0[[lag_var]] <- data.frame(time = 0:(lDATM_SETTINGS$run_settings["dReady", "Set0"]*365),
-                                                       value = -99999) 
+                                                               value = -99999) 
     message('adding ', lag_var, ' forcing')
   }
 }
@@ -190,8 +191,8 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
-                                  eval_target = function(x,y){(x-y)/y})#,
-                                  # eval_days = 121:244)
+                                  eval_target = function(x,y){abs(x-y)/y})#,
+  # eval_days = 121:244)
   return(eval_output)
 }
 
@@ -245,7 +246,7 @@ iteration_summary <- as.data.frame(opt_pathway$member$bestmemit) |>
   mutate(fn_out = opt_pathway$member$bestvalit[1:n_iter])
 
 
-ggplot(iteration_summary, aes(x=fMarsh, y= mPLoadEpi_lag, size = mPLoadEpi, colour = fn_out)) +
+ggplot(iteration_summary, aes(x=fMarsh, y= fMarsh_lag, size = mPLoadEpi, colour = fn_out)) +
   geom_point() +
   scale_color_viridis_c() +
   coord_cartesian(xlim = c(0,0.2), 
@@ -284,9 +285,10 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                  }
 
 last_iteration |> 
-  # slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
-  ggplot(aes(x=fMarsh, y= mPLoadEpi_lag, size = mPLoadEpi, colour = fn_out)) + 
+  slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
+  ggplot(aes(x=fMarsh_lag, y= fMarsh, size = mPLoadEpi, colour = fn_out)) + 
   geom_point(alpha = 0.5) + 
-  scale_colour_gradient2() +
-  coord_cartesian(xlim = c(0,0.2), 
-                  ylim = c(1,5))
+  scale_colour_viridis_c() +
+  coord_cartesian(xlim = c(1,5), 
+                  ylim = c(0,0.2))
+
