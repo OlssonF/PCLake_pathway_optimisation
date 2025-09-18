@@ -323,3 +323,9 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                      }
 
 
+state_opt |> 
+  pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
+  pivot_longer(cols = oChlaEpi:aSecchiT, names_to = 'opt_var', values_to = 'out') |> 
+  ggplot(aes(x=mPLoadEpi, y = out, size = fMarsh_lag, colour = fMarsh)) + geom_point() +
+  facet_wrap(~opt_var, scales = 'free') +
+  scale_color_viridis_c()
