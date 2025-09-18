@@ -292,3 +292,34 @@ last_iteration |>
   coord_cartesian(xlim = c(1,5), 
                   ylim = c(0,0.2))
 
+
+
+# what are the values of the optimised variables?
+state_opt <- foreach(i = 1:nrow(last_iteration),
+                     .combine = bind_rows, 
+                     .multicombine = TRUE,
+                     .packages=c("tidyverse", "deSolve"),
+                     .options.snow = opts) %dopar% {
+                       
+                       val_pars <- last_iteration[i,names(lower_bound)] |> unlist()
+                       
+                       name_pars <- last_iteration[i,names(lower_bound)] |> names()
+                       
+                       df_pars <- data.frame(variable = name_pars, output = val_pars)
+                       
+                       run_pathway(val_pars, name_pars) |>
+                         mutate(year = floor((time-1)/365) + 1,
+                                doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
+                         filter(year == max(year), # filters to summer in the last year of the simulation
+                                doy %in% 121:244) |> 
+                         select(desired_states$variable) |> 
+                         summarise(across(any_of(desired_states$variable), mean)) |> 
+                         pivot_longer(cols = any_of(desired_states$variable),
+                                      names_to = 'variable',
+                                      values_to = 'output') |> 
+                         bind_rows(df_pars) |> 
+                         mutate(ID = i)
+                       
+                     }
+
+
