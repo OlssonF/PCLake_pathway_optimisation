@@ -20,9 +20,16 @@ run_pathway <- function(val_pars, name_pars) {
   lDATM_SETTINGS_obj <- lDATM_SETTINGS
   lag_pars_lag <- grep('_lag', name_pars) # these are model parameters with lags - take these out
   lag_pars <- which(name_pars %in% gsub('_lag', '', name_pars[lag_pars_lag]))
+  none_lag_pars <- name_pars[-c(lag_pars, lag_pars_lag)]
   
-  
-  lDATM_SETTINGS_obj$params[name_pars[-c(lag_pars, lag_pars_lag)], "sDefault0"] <- val_pars[-c(lag_pars, lag_pars_lag)]
+  # check if these non-lagged parameter values are listed in the forcings and change there if it is, if not just change the parameter value
+  for (p in none_lag_pars) {
+    if (p %in% names(lDATM_SETTINGS_obj$forcings$sDefault0)) {
+      lDATM_SETTINGS_obj$forcings$sDefault0[[p]]$value <- val_pars[which(name_pars ==p)]
+    } else {
+      lDATM_SETTINGS_obj$params[name_pars[-c(lag_pars, lag_pars_lag)], "sDefault0"] <- val_pars[-c(lag_pars, lag_pars_lag)]
+    }
+  }
   
   
   # set the lagged variables via the forcings in the DATM file
