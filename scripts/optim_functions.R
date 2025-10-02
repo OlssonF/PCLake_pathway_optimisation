@@ -7,7 +7,7 @@
 #' @export
 #'
 #' @examples
- 
+
 run_pathway <- function(val_pars, name_pars) {
   
   # For debugging ----------------- #
@@ -76,7 +76,7 @@ run_pathway <- function(val_pars, name_pars) {
 #'
 #' @param PCLake_output output from run_pathway
 #' @param future_states dataframe of variable and target value
-#' @param eval_target how should the target be evaluated, function to call
+#' @param eval_target how should the target be evaluated, list of functions to call, matched to the states
 #' @param eval_days which days in the last year should be evaluated
 #'
 #' @returns numeric value output from eval_target function call
@@ -85,13 +85,13 @@ run_pathway <- function(val_pars, name_pars) {
 #' @examples
 evaluate_pathway <- function(PCLake_output, 
                              future_states,
-                             eval_target = function(x,y){abs(x-y)/y},
+                             eval_target = list(function(x,y){abs(x-y)/y}),
                              eval_days = 121:244) {
   
   # For debugging ----------------- #
   # PCLake_output = PCModel_run
-  # future_states
-  # eval_target = function(x,y){(x-y)/y}
+  # future_states = desired_states
+  # eval_target = list(function(x,y){(x-y)/y})
   # eval_days = 121:244
   #--------------------------------#
   
@@ -111,11 +111,31 @@ evaluate_pathway <- function(PCLake_output,
                  names_to = 'variable',
                  values_to = 'output')
   
+  # need a more complex process if the evaluation happens seperately (different function by objective)
+  if (length(eval_target) == 1) {
+    pathway_error <- model_output |> 
+      full_join(future_states, by = 'variable') |> 
+      mutate(diff = eval_target[[1]](output, target)) |> 
+      summarise(total_error = sum(diff)) 
+  } else {
+    message('matching evaluation function by state')
+    
+    pathway_error <- model_output |> 
+      full_join(future_states, by = 'variable') |> 
+      mutate(diff= NA)
+    
+    for (i in nrow(pathway_error)) {
+      use_fun <- eval_target[[which(names(eval_target) == pathway_error$variable[i])]]
+      pathway_error$diff[i] <- use_fun(pathway_error$output[i], pathway_error$target[i])
+    }
+    
+    pathway_error <- pathway_error  |> 
+      summarise(total_error = sum(diff)) ### IS THIS HOW YOU WOULD SUM THEM????
   
-  pathway_error <- model_output |> 
-    full_join(future_states, by = 'variable') |> 
-    mutate(diff = eval_target(output, target)) |> # |> eval_target(x = output,     y = target)
-    summarise(total_error = sum(diff)) 
+    
+  }
+  
+  
   
   # print(model_output)
   
