@@ -112,11 +112,11 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 # Define the parameter values to be optimised
 lower_bound <- c('mPLoadEpi' = 0.001, #minimum Ploading
                  #'mPLoadEpi_lag' = 1,
-                 'fMarsh_lag' = 1, # need at least a year?
+                 'fMarsh_lag' = 5, # need at least a year?
                  'fMarsh' = 0) # fraction of marsh area relative to lake
 upper_bound <- c('mPLoadEpi' = 0.01,
                  #'mPLoadEpi_lag' = 10,
-                 'fMarsh_lag' = 5*1, # could be at least 5 year lag
+                 'fMarsh_lag' = 20*1, # could be at least 20 year lag
                  'fMarsh' = 0.2) 
 
 # error_pars <- c('mPLoadEpi' = 0.0005531256, #minimum Ploading
@@ -129,8 +129,8 @@ current_val <- c('mPLoadEpi' = 0.05,
                  'fMarsh' = 0) # the "unchanged" value (before the measure is in place) - could also be a timeseries I guess?
 
 # Define the desired future state(s)
-desired_states <- data.frame(variable = c('oChlaEpi', 'aSecchiT'),
-                             target = c(20, 0.5))
+desired_states <- data.frame(variable = 'oChlaEpi', #c('aDFish'),#, 'aSecchiT'),
+                             target = 20) #c(6))#, 0.5))
 
 
 ## Update the DATM file and recompile the model ---------------
@@ -191,7 +191,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
-                                  eval_target = function(x,y){abs(x-y)/y})#,
+                                  eval_target = function(x,y){(x-y)/y})#,
   # eval_days = 121:244)
   return(eval_output)
 }
@@ -205,7 +205,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
   clusterEvalQ(cl, library(tidyverse))
   clusterEvalQ(cl, library(deSolve))
   clusterExport(cl, list("lDATM_SETTINGS", 'current_val', 'equilibrium_states',
-                         # "PCModelInitializeModel", 
+                         "PCModelInitializeModel", 
                          "dirShell", "nameWorkCase", 'dirHome',
                          "PCmodelSingleRun", "RunModel", 'run_pathway', 'evaluate_pathway'))
   
@@ -287,7 +287,7 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
 last_iteration |> 
   slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
   ggplot(aes(x=fMarsh_lag, y= fMarsh, size = mPLoadEpi, colour = fn_out)) + 
-  geom_point(alpha = 0.5) + 
+  geom_point() + 
   scale_colour_viridis_c() +
   coord_cartesian(xlim = c(1,5), 
                   ylim = c(0,0.2))
@@ -325,7 +325,39 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
 
 state_opt |> 
   pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
-  pivot_longer(cols = oChlaEpi:aSecchiT, names_to = 'opt_var', values_to = 'out') |> 
+  pivot_longer(cols = oChlaEpi, names_to = 'opt_var', values_to = 'out') |> 
   ggplot(aes(x=mPLoadEpi, y = out, size = fMarsh_lag, colour = fMarsh)) + geom_point() +
   facet_wrap(~opt_var, scales = 'free') +
-  scale_color_viridis_c()
+  scale_color_viridis_c(option  = 'A', begin = 1, end = 0)
+
+
+ # what is the "pathway" to the optimised value?
+state_pathways <- foreach(i = 1:nrow(last_iteration),
+                     .combine = bind_rows, 
+                     .multicombine = TRUE,
+                     .packages=c("tidyverse", "deSolve"),
+                     .options.snow = opts) %dopar% {
+                       
+                       val_pars <- last_iteration[i,names(lower_bound)] |> unlist()
+                       
+                       name_pars <- last_iteration[i,names(lower_bound)] |> names()
+                       
+                       df_pars <- data.frame(variable = name_pars, output = val_pars)
+                       
+                       run_pathway(val_pars, name_pars) |>
+                         mutate(year = floor((time-1)/365) + 1,
+                                doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
+                         filter(# filters to summer all years of the simulation
+                                doy %in% 121:244) |> 
+                         select(c('year', desired_states$variable)) |> 
+                         group_by(year) |> 
+                         summarise(across(any_of(desired_states$variable), mean)) |> 
+                         bind_cols(pivot_wider(df_pars, names_from = variable, values_from = output)) |>  
+                         mutate(ID = i)
+                       
+                     }
+state_pathways |> 
+  ggplot(aes(y=oChlaEpi, x=year, group = ID, colour = fMarsh)) +
+  geom_vline(aes(xintercept = fMarsh_lag), alpha = 0.7) +
+  geom_line(aes(colour = fMarsh)) +
+  scale_colour_viridis_c(option = 'A')
