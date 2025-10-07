@@ -76,7 +76,7 @@ run_pathway <- function(val_pars, name_pars) {
 #'
 #' @param PCLake_output output from run_pathway
 #' @param future_states dataframe of variable and target value
-#' @param eval_target how should the target be evaluated, list of functions to call, matched to the states
+#' @param eval_target how should the target be evaluated, list of functions to call, matched to the state names
 #' @param eval_days which days in the last year should be evaluated
 #'
 #' @returns numeric value output from eval_target function call
@@ -85,7 +85,7 @@ run_pathway <- function(val_pars, name_pars) {
 #' @examples
 evaluate_pathway <- function(PCLake_output, 
                              future_states,
-                             eval_target = list(function(x,y){abs(x-y)/y}),
+                             eval_target = list(function(out,target){abs(out-target)/target}),
                              eval_days = 121:244) {
   
   # For debugging ----------------- #
@@ -115,7 +115,7 @@ evaluate_pathway <- function(PCLake_output,
   if (length(eval_target) == 1) {
     pathway_error <- model_output |> 
       full_join(future_states, by = 'variable') |> 
-      mutate(diff = eval_target[[1]](output, target)) |> 
+      mutate(diff = list(eval_target)[[1]](output, target)) |> 
       summarise(total_error = sum(diff)) 
   } else {
     message('matching evaluation function by state')
@@ -124,7 +124,7 @@ evaluate_pathway <- function(PCLake_output,
       full_join(future_states, by = 'variable') |> 
       mutate(diff= NA)
     
-    for (i in nrow(pathway_error)) {
+    for (i in 1:nrow(pathway_error)) {
       use_fun <- eval_target[[which(names(eval_target) == pathway_error$variable[i])]]
       pathway_error$diff[i] <- use_fun(pathway_error$output[i], pathway_error$target[i])
     }
