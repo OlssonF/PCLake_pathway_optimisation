@@ -189,12 +189,12 @@ obj_function <- function(val_pars, name_pars, future_states) {
   # future_states <- desired_states #
   #--------------------------------#
   
-  model_output <- run_pathway(val_pars, name_pars)
+  model_output <- run_pathway(val_pars, name_pars, initial_conditions = equilibrium_states)
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
-                                                     aDFish = function(out,target){abs(out-target)/target},  # target exact value
+                                                     aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
                                                             # function(out,target){(target-out)/target}      # above better
                                                      ))
   return(eval_output)

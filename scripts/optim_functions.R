@@ -2,20 +2,21 @@
 #'
 #' @param val_pars values of the pathway parameters
 #' @param name_pars names of the pathway parameters
+#' @param initial_conditions dataframe of initial values (from prepInitials() or use default)
 #'
 #' @returns a dataframe of PCLake output as defined in the DATM file
 #' @export
 #'
 #' @examples
 
-run_pathway <- function(val_pars, name_pars) {
+run_pathway <- function(val_pars, name_pars, initial_conditions = NULL) {
   
   # For debugging ----------------- #
   # val_pars <- lower_bound
   # name_pars <- names(lower_bound)
   # future_states <- desired_states #
   #--------------------------------#
-  
+
   # Setting parameter values -----------#
   lDATM_SETTINGS_obj <- lDATM_SETTINGS
   lag_pars_lag <- grep('_lag', name_pars) # these are model parameters with lags - take these out
@@ -56,7 +57,14 @@ run_pathway <- function(val_pars, name_pars) {
   
   
   # Initialise and run model with these parameters
-  lDATM_SETTINGS_obj$states[equilibrium_states$variable, "sDefaultSetTurbid0"] <- equilibrium_states$value # these are extracted from a equilibrium model run
+  
+  if (!is_null(initial_conditions)) {  
+    lDATM_SETTINGS_obj$states[equilibrium_states$variable, "sDefaultSetTurbid0"] <- initial_conditions$value 
+    # these could be extracted from a equilibrium model run
+    message("Using provided initial conditions not DATM file values")
+  }
+  # or just reinitialise based on the DATM file
+
   InitStates_01 <- PCModelInitializeModel(lDATM = lDATM_SETTINGS_obj,
                                           dirSHELL = dirShell,
                                           nameWORKCASE = nameWorkCase)
