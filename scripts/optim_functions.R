@@ -21,7 +21,13 @@ run_pathway <- function(val_pars, name_pars, initial_conditions = NULL) {
   lDATM_SETTINGS_obj <- lDATM_SETTINGS
   lag_pars_lag <- grep('_lag', name_pars) # these are model parameters with lags - take these out
   lag_pars <- which(name_pars %in% gsub('_lag', '', name_pars[lag_pars_lag]))
-  none_lag_pars <- name_pars[-c(lag_pars, lag_pars_lag)]
+  
+  # it wasn't working if there were no lagged pars
+  if (length(lag_pars) == 0) {
+    none_lag_pars <- name_pars
+  } else {
+    none_lag_pars <- name_pars[-c(lag_pars, lag_pars_lag)]
+  }
   
   # check if these non-lagged parameter values are listed in the forcings and change there if it is, if not just change the parameter value
   for (p in none_lag_pars) {
@@ -59,7 +65,7 @@ run_pathway <- function(val_pars, name_pars, initial_conditions = NULL) {
   # Initialise and run model with these parameters
   
   if (!is_null(initial_conditions)) {  
-    lDATM_SETTINGS_obj$states[equilibrium_states$variable, "sDefaultSetTurbid0"] <- initial_conditions$value 
+    lDATM_SETTINGS_obj$states[initial_conditions$variable, "sDefaultSetTurbid0"] <- initial_conditions$value 
     # these could be extracted from a equilibrium model run
     message("Using provided initial conditions not DATM file values")
   }
