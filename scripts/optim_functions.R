@@ -110,7 +110,11 @@ evaluate_pathway <- function(PCLake_output,
   #--------------------------------#
   
   if (sum(!future_states$variable %in% colnames(PCLake_output)) > 0) {
-    stop("PCLake output doesn't contain the evaluation variables from the future states")
+    stop("PCLake output doesn't contain the evaluation variables from the future states.")
+  }
+  
+  if ( sum(!names(eval_target) %in% colnames(PCLake_output)) > 0) {
+    stop("PCLake output doesn't contain the evaluation variables from the eval_target. Either remove from the obj_function or amend future_statees")
   }
   
   # Extract model output and compare with desired state
@@ -129,7 +133,7 @@ evaluate_pathway <- function(PCLake_output,
   if (length(eval_target) == 1) {
     pathway_error <- model_output |> 
       full_join(future_states, by = 'variable') |> 
-      mutate(diff = list(eval_target)[[1]](output, target)) |> 
+      mutate(diff = eval_target[[1]](output, target)) |> 
       summarise(total_error = sum(diff)) 
   } else {
     message('matching evaluation function by state')
