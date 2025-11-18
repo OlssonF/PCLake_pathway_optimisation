@@ -121,10 +121,6 @@ upper_bound <- c('mPLoadEpi' = 0.01,
                  'fMarsh_lag' = 20*1, # could be at least 20 year lag
                  'fMarsh' = 0.2) 
 
-# error_pars <- c('mPLoadEpi' = 0.0005531256, #minimum Ploading
-#                 'mPLoadEpi_lag' = 4.3935696417, # need at least a year?
-#                 'fMarsh' = 0.8961858496)
-
 # these are needed to give a value for any variable that is lagged
 current_val <- c('mPLoadEpi' = 0.05,
                  'fMarsh' = 0) 
@@ -181,6 +177,17 @@ PCModelCompileModelWorkCase(dirSHELL = dirShell,
 
 source(file.path(project_location, "scripts/optim_functions.R")) # functions for running and evaluating the pathways
 
+#' Define the objective function with the output to be optimised
+#'
+#' @param val_pars a vector of parameter values to be evaluated
+#' @param name_pars a vector of the parameter names, same order as val_pars
+#' @param future_states the desired future values to be compared
+#' @description the function is split into two parts - run the pathway returns PCLake output, this is then compared with the desired states
+#' @returns an single evaluation value to be optimised
+#' @export
+#'
+#' @examples obj_function(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
+
 obj_function <- function(val_pars, name_pars, future_states) {
   
   # For debugging ----------------- #
@@ -193,10 +200,11 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
-                                  eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
-                                                     aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
-                                                            # function(out,target){(target-out)/target}      # above better
-                                                     ))
+                                  eval_target = list(oChlaEpi = function(out,target){(out-target)/target}))
+                                  # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
+                                  #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
+                                  #                           # function(out,target){(target-out)/target}      # above better
+                                  #                    ))
   return(eval_output)
 }
 
@@ -216,18 +224,24 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   doSNOW::registerDoSNOW(cl)
   
-  deoptim_control <- list(NP = 15 * length(lower_bound),
-                          CR = 0.9,
-                          F = 0.80, 
+  deoptim_control <- list(NP = 10 * length(lower_bound), #number of population members, should be at least 10 times the length of the parameter
+                          CR = 0.9, # crossover probability between 0-1, default in 0.5
+                          F = 0.80, # differential weighting factor between 0-2. Default to 0.8
+                          itermax = 100, # the maximum iteration (population generation) allowed
+                          reltol = 0.001, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
+                          steptol = 5, # number of minimum ssteps
+                          # c = 0.05, strategy = 6, p = 0.10
+                          c = 0.25,  # the speed of crossover adaptation. Between 0-1. Higher c give more weight to the current successful mutations
+                          strategy = 6, # DE / current-to-p-best / 1
+                          p = 0.40, # the top (100 * p)% best solutions are used in the mutation
+                          storepopfrom = 0, # 0 = store all intermediate pops
                           trace = TRUE,
-                          itermax = 20, 
-                          reltol = 0.001, 
-                          steptol = 5, 
-                          #c = 0.05, strategy = 6, p = 0.10,
-                          c = 0.25, strategy = 6, p = 0.40, 
-                          storepopfrom = 0,
                           parallelType = 'foreach')
   
+  # Several conditions can cause the optimization process to stop:
+  # if the maximum number of iterations is reached (itermax), or
+  # if a number (steptol) of consecutive iterations are unable to reduce the best function value by a certain amount (reltol * (abs(val) + reltol)). 
+    # 100*reltol is approximately the percent change of the objective value required to consider the parameter set an improvement over the current best member.
   
   set.seed(1234)
   
@@ -293,7 +307,7 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                  }
 
 last_iteration |> 
-  # slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
+  slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
   ggplot(aes(x=fMarsh_lag, y= fMarsh, size = mPLoadEpi, colour = fn_out)) + 
   geom_point() + 
   scale_colour_viridis_c() 
