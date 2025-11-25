@@ -16,7 +16,7 @@ run_pathway <- function(val_pars, name_pars, initial_conditions = NULL) {
   # name_pars <- names(lower_bound)
   # future_states <- desired_states #
   #--------------------------------#
-
+  
   # Setting parameter values -----------#
   lDATM_SETTINGS_obj <- lDATM_SETTINGS
   lag_pars_lag <- grep('_lag', name_pars) # these are model parameters with lags - take these out
@@ -70,7 +70,7 @@ run_pathway <- function(val_pars, name_pars, initial_conditions = NULL) {
     message("Using provided initial conditions not DATM file values")
   }
   # or just reinitialise based on the DATM file
-
+  
   InitStates_01 <- PCModelInitializeModel(lDATM = lDATM_SETTINGS_obj,
                                           dirSHELL = dirShell,
                                           nameWORKCASE = nameWorkCase)
@@ -130,33 +130,47 @@ evaluate_pathway <- function(PCLake_output,
                  values_to = 'output')
   
   # need a more complex process if the evaluation happens seperately (different function by objective)
-  if (length(eval_target) == 1) {
-    pathway_error <- model_output |> 
-      full_join(future_states, by = 'variable') |> 
-      mutate(diff = eval_target[[1]](output, target)) |> 
-      summarise(total_error = sum(diff)) 
-  } else {
-    message('matching evaluation function by state')
+  # Check for matching names across the eval_functions and future states
+  if (length(names(eval_target)) > 0) { # if the functions are named check them
     
-    pathway_error <- model_output |> 
-      full_join(future_states, by = 'variable') |> 
-      mutate(diff= NA)
-    
-    for (i in 1:nrow(pathway_error)) {
-      use_fun <- eval_target[[which(names(eval_target) == pathway_error$variable[i])]]
-      pathway_error$diff[i] <- use_fun(pathway_error$output[i], pathway_error$target[i])
+    if (sum(stringr::str_equal(names(eval_target), future_states$variable)) != length(future_states$variable)) {
+      stop('the name(s) of your eval_function(s) dont match the future states') 
+    } else {
+      
+      message('matching evaluation function by state')
+      
+      pathway_error <- model_output |> 
+        full_join(future_states, by = 'variable') |> 
+        mutate(diff= NA)
+      
+      for (i in 1:nrow(pathway_error)) {
+        use_fun <- eval_target[[which(names(eval_target) == pathway_error['variable'][i])]]
+        pathway_error$diff[i] <- use_fun(pathway_error$output[i], pathway_error$target[i])
+      }
+      
+      pathway_error <- pathway_error  |> 
+        summarise(total_error = sum(diff)) ### IS THIS HOW YOU WOULD SUM THEM????
+      
     }
     
-    pathway_error <- pathway_error  |> 
-      summarise(total_error = sum(diff)) ### IS THIS HOW YOU WOULD SUM THEM????
-  
-    
+  } else {
+    if (length(eval_target) == 1) { # if there is only one function 
+      
+      if (nrow(future_states) != 1) { # but multiple states give a warning message
+        message('Warning: using a single evaluation function')
+      }
+      
+      pathway_error <- model_output |> 
+        full_join(future_states, by = 'variable') |> 
+        mutate(diff = eval_target[[1]](output, target)) |> 
+        summarise(total_error = sum(diff)) 
+      
+    } else {
+      stop("If you are passing more than one function they need to be named") # cannot pass more than one unnamed function
+    }
   }
   
-  
-  
-  # print(model_output)
-  
+
   out_val <- pathway_error |> pull(total_error)
   return(out_val)
   
