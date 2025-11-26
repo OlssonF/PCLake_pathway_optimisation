@@ -89,7 +89,7 @@ run_pathway <- function(val_pars, name_pars, initial_conditions = NULL) {
 #' Evaluate a parameter pathway
 #'
 #' @param PCLake_output output from run_pathway
-#' @param future_states dataframe of variable and target value
+#' @param future_states dataframe of variable and target value, with weights
 #' @param eval_target how should the target be evaluated, list of functions to call, matched to the state names
 #' @param eval_days which days in the last year should be evaluated
 #'
@@ -144,12 +144,13 @@ evaluate_pathway <- function(PCLake_output,
         mutate(diff= NA)
       
       for (i in 1:nrow(pathway_error)) {
-        use_fun <- eval_target[[which(names(eval_target) == pathway_error['variable'][i])]]
+        use_fun <- eval_target[[which(names(eval_target) == unlist(pathway_error['variable'][i,]))]]
         pathway_error$diff[i] <- use_fun(pathway_error$output[i], pathway_error$target[i])
       }
       
       pathway_error <- pathway_error  |> 
-        summarise(total_error = sum(diff)) ### IS THIS HOW YOU WOULD SUM THEM????
+        mutate(diff_weighted = diff * weights) |> 
+        summarise(total_error = sum(diff_weighted)) ### IS THIS HOW YOU WOULD SUM THEM????
       
     }
     
@@ -162,8 +163,9 @@ evaluate_pathway <- function(PCLake_output,
       
       pathway_error <- model_output |> 
         full_join(future_states, by = 'variable') |> 
-        mutate(diff = eval_target[[1]](output, target)) |> 
-        summarise(total_error = sum(diff)) 
+        mutate(diff = eval_target[[1]](output, target), 
+               diff_weighted = diff * weights) |> 
+        summarise(total_error = sum(diff_weighted)) 
       
     } else {
       stop("If you are passing more than one function they need to be named") # cannot pass more than one unnamed function
