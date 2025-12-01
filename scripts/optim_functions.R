@@ -117,6 +117,10 @@ evaluate_pathway <- function(PCLake_output,
     stop("PCLake output doesn't contain the evaluation variables from the eval_target. Either remove from the obj_function or amend future_statees")
   }
   
+  if (sum(future_states$weights) != 1) {
+    stop("Weights should add to 1")
+  }
+  
   # Extract model output and compare with desired state
   model_output <- PCLake_output |>
     mutate(year = floor((time-1)/365) + 1,
