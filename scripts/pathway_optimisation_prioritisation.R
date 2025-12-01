@@ -1,7 +1,8 @@
 #--------------------------------------#
-## Project: Pathway Optimisation Framework 
-## Script purpose: Example of a robust pathway optimisation under deep uncertainty. Are there pathways that are robust under multiple climate scenarios?
-## Date: 2025-11-20
+## Project: Pathway Optimisation Framework - multi-objective with weights
+## Script purpose: Simple example of an optimsation framework using PCLake for multiple objectives 
+## measures with prioritisation (weights)
+## Date: 2025-11-25 (mostly a copy from pathway_optimisation.R)
 ## Author: Freya Olsson
 #--------------------------------------#
 
@@ -52,7 +53,7 @@ source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.R"))
 ##   5. Compile model
 ##   6. Run optimisation - runs in parallel kind of in a forloop
 #   a) dataframe of parameter ranges (model parameters) and lags
-#   b) define objective function (comparison of desired future and "current" state)
+#   b) define objective function (comparison of desired future and "current" state), the weights are applied to reflect priorities
 #   c) identify top pathways
 
 ## 2. Load DATM file  -------------------             
@@ -127,15 +128,15 @@ current_val <- c('mPLoadEpi' = 0.05,
 # What is the objective
 # Define the desired future state(s)
 desired_states <- data.frame(variable = c('oChlaEpi', 'aDFish'),#, 'aSecchiT'),
-                             target = c(20, 6),#, 0.5))
-                             weights = c(0.5,0.5))
+                             target = c(20, 6),
+                             weights = c(0.1,0.9))#, 0.5))
 
 
 ## Update the DATM file and recompile the model ---------------#
 # Report variables
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 0 # these can be turned off
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% desired_states$variable)] <- 1 # report optim vars
-lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) == 'uTmEpi')] <- 1 # report surface temp to check
+
 # forcing variables --------------#
 # anything that is being lagged needs to be in the forcings before compilation
 for (i in names(lower_bound)) {
@@ -175,19 +176,18 @@ PCModelCompileModelWorkCase(dirSHELL = dirShell,
 
 source(file.path(project_location, "scripts/optim_functions.R")) # functions for running and evaluating the pathways
 
-#' Define the robust objective function with the output to be optimised
+#' Define the objective function with the output to be optimised
 #'
 #' @param val_pars a vector of parameter values to be evaluated
 #' @param name_pars a vector of the parameter names, same order as val_pars
 #' @param future_states the desired future values to be compared
-#'
 #' @description the function is split into two parts - run the pathway returns PCLake output, this is then compared with the desired states
 #' @returns an single evaluation value to be optimised
 #' @export
 #'
 #' @examples obj_function(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
 
-robust_obj_function <- function(val_pars, name_pars, future_states) {
+obj_function <- function(val_pars, name_pars, future_states) {
   
   # For debugging ----------------- #
   # val_pars <- upper_bound
@@ -195,40 +195,16 @@ robust_obj_function <- function(val_pars, name_pars, future_states) {
   # future_states <- desired_states #
   #--------------------------------#
   
-  # Run the model once with unchanged temperature conditions
-  lDATM_SETTINGS$params$sDefault0[str_detect(rownames(lDATM_SETTINGS$params), 'cTmAveEpi')] <- 12
-  lDATM_SETTINGS$params$sDefault0[str_detect(rownames(lDATM_SETTINGS$params), 'cTmAveHyp')] <- 5
+  model_output <- run_pathway(val_pars, name_pars, initial_conditions = equilibrium_states)
   
-  model_output1 <- run_pathway(val_pars, name_pars, initial_conditions = equilibrium_states)
-  
-  eval_output1 <- evaluate_pathway(PCLake_output = model_output1, 
-                                   future_states = future_states,
-                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target},
-                                                      aDFish = function(out,target){abs(out-target)/target}))
+  eval_output <- evaluate_pathway(PCLake_output = model_output, 
+                                  future_states = future_states,
+                                  eval_target = list(oChlaEpi = function(out,target){(out-target)/target},
+                                                     aDFish = function(out,target){abs(out-target)/target}))
   # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
-  #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
+  #                    #,  # target exact value
   #                           # function(out,target){(target-out)/target}      # above better
   #                    ))
-  
-  
-  # Run the model a second time with a 'climate change scenario'
-  # Always uses run_set = 0
-  lDATM_SETTINGS$params$sDefault0[str_detect(rownames(lDATM_SETTINGS$params), 'cTmAveEpi')] <- 13
-  lDATM_SETTINGS$params$sDefault0[str_detect(rownames(lDATM_SETTINGS$params), 'cTmAveHyp')] <- 5.5
-  
-  model_output2 <- run_pathway(val_pars, name_pars, initial_conditions = equilibrium_states)
-  
-  eval_output2 <- evaluate_pathway(PCLake_output = model_output2, 
-                                   future_states = future_states,
-                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target},
-                                                      aDFish = function(out,target){abs(out-target)/target}))
-  # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
-  #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
-  #                           # function(out,target){(target-out)/target}      # above better
-  #                    ))
-  
-  eval_output <- eval_output1 + eval_output2
-  
   return(eval_output)
 }
 
@@ -271,7 +247,7 @@ robust_obj_function <- function(val_pars, name_pars, future_states) {
   
   opt_pathway <- DEoptim::DEoptim(lower = lower_bound,
                                   upper = upper_bound, 
-                                  fn = robust_obj_function,
+                                  fn = obj_function,
                                   control = deoptim_control, 
                                   name_pars = names(lower_bound),
                                   future_states = desired_states)
@@ -327,7 +303,7 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                    name_pars <- last_iteration[i,] |> 
                                      select(-runID) |> names()
                                    
-                                   save <- robust_obj_function(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
+                                   save <- obj_function(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
                                  }
 
 last_iteration |> 

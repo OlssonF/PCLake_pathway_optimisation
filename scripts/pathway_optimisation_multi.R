@@ -127,7 +127,8 @@ current_val <- c('mPLoadEpi' = 0.05,
 # What is the objective
 # Define the desired future state(s)
 desired_states <- data.frame(variable = c('oChlaEpi', 'aDFish'),#, 'aSecchiT'),
-                             target = c(20, 6))#, 0.5))
+                             target = c(20, 6),
+                             weights = c(0.5,0.5))#, 0.5))
 
 
 ## Update the DATM file and recompile the model ---------------#
@@ -197,7 +198,8 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
-                                  eval_target = list(oChlaEpi = function(out,target){(out-target)/target}))
+                                  eval_target = list(oChlaEpi = function(out,target){(out-target)/target},
+                                                     aDFish = function(out,target){abs(out-target)/target}))
   # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
   #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
   #                           # function(out,target){(target-out)/target}      # above better
