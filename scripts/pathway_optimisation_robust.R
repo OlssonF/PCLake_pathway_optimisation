@@ -127,14 +127,15 @@ current_val <- c('mPLoadEpi' = 0.05,
 # What is the objective
 # Define the desired future state(s)
 desired_states <- data.frame(variable = c('oChlaEpi', 'aDFish'),#, 'aSecchiT'),
-                             target = c(20, 6))#, 0.5))
+                             target = c(20, 6),#, 0.5))
+                             weights = c(1,1))
 
 
 ## Update the DATM file and recompile the model ---------------#
 # Report variables
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 0 # these can be turned off
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% desired_states$variable)] <- 1 # report optim vars
-lDATM_SETTINGS$auxils$iReport[str_detect(rownames(lDATM_SETTINGS$auxils), 'uTmEpi'),] <- 1 # report surface temp to check
+lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) == 'uTmEpi')] <- 1 # report surface temp to check
 # forcing variables --------------#
 # anything that is being lagged needs to be in the forcings before compilation
 for (i in names(lower_bound)) {
@@ -199,10 +200,11 @@ robust_obj_function <- function(val_pars, name_pars, future_states) {
   lDATM_SETTINGS$params$sDefault0[str_detect(rownames(lDATM_SETTINGS$params), 'cTmAveHyp')] <- 5
   
   model_output1 <- run_pathway(val_pars, name_pars, initial_conditions = equilibrium_states)
-
+  
   eval_output1 <- evaluate_pathway(PCLake_output = model_output1, 
-                                  future_states = future_states,
-                                  eval_target = list(oChlaEpi = function(out,target){(out-target)/target}))
+                                   future_states = future_states,
+                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target},
+                                                      aDFish = function(out,target){abs(out-target)/target}))
   # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
   #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
   #                           # function(out,target){(target-out)/target}      # above better
@@ -218,7 +220,8 @@ robust_obj_function <- function(val_pars, name_pars, future_states) {
   
   eval_output2 <- evaluate_pathway(PCLake_output = model_output2, 
                                    future_states = future_states,
-                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target}))
+                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target},
+                                                      aDFish = function(out,target){abs(out-target)/target}))
   # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
   #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
   #                           # function(out,target){(target-out)/target}      # above better
@@ -324,7 +327,7 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                    name_pars <- last_iteration[i,] |> 
                                      select(-runID) |> names()
                                    
-                                   save <- obj_function(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
+                                   save <- robust_obj_function(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
                                  }
 
 last_iteration |> 

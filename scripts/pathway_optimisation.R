@@ -112,25 +112,26 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 # dataframe of parameter ranges (model parameters) and lags 
 
 # Define the parameter values to be optimised
-lower_bound <- c('mPLoadEpi' = 0.001, #minimum Ploading
+lower_bound <- c('mPLoadEpi' = 0.005, #minimum Ploading
                  #'mPLoadEpi_lag' = 1,
                  'fMarsh_lag' = 5, # need at least a year?
                  'fMarsh' = 0) # fraction of marsh area relative to lake
-upper_bound <- c('mPLoadEpi' = 0.01,
+upper_bound <- c('mPLoadEpi' = 0.05,
                  #'mPLoadEpi_lag' = 10,
                  'fMarsh_lag' = 20*1, # could be at least 20 year lag
                  'fMarsh' = 0.2) 
 
 # these are needed to give a value for any variable that is lagged
-current_val <- c('mPLoadEpi' = 0.05,
+current_val <- c('mPLoadEpi' = 0.08,
                  'fMarsh' = 0) 
 # the "unchanged" value (before the measure is in place) - could also be a timeseries I guess?
 
 ### b. Define the desired future ------------------
 # What is the objective
 # Define the desired future state(s)
-desired_states <- data.frame(variable = c('oChlaEpi', 'aDFish'),#, 'aSecchiT'),
-                             target = c(20, 6))#, 0.5))
+desired_states <- data.frame(variable = 'oChlaEpi',
+                             target = 20,
+                             weights = 1)#, 0.5))
 
 
 ## Update the DATM file and recompile the model ---------------#
@@ -200,11 +201,11 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
-                                  eval_target = list(oChlaEpi = function(out,target){(out-target)/target}))
+                                  eval_target = list(oChlaEpi = function(out,target){(out-target)/target})
                                   # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
                                   #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
-                                  #                           # function(out,target){(target-out)/target}      # above better
-                                  #                    ))
+                                                            # function(out,target){(target-out)/target}      # above better
+                                                     )
   return(eval_output)
 }
 
