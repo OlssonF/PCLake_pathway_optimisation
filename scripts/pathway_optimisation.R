@@ -112,10 +112,10 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 # dataframe of parameter ranges (model parameters) and lags 
 
 # Define the parameter values to be optimised
-lower_bound <- c('mPLoadEpi' = 0.005, #minimum Ploading
+lower_bound <- c('mPLoadEpi' = 0.002, #minimum Ploading
                  #'mPLoadEpi_lag' = 1,
                  'fMarsh_lag' = 5, # need at least a year?
-                 'fMarsh' = 0) # fraction of marsh area relative to lake
+                 'fMarsh' = 0.1) # fraction of marsh area relative to lake
 upper_bound <- c('mPLoadEpi' = 0.05,
                  #'mPLoadEpi_lag' = 10,
                  'fMarsh_lag' = 20*1, # could be at least 20 year lag
@@ -131,7 +131,7 @@ current_val <- c('mPLoadEpi' = 0.08,
 # Define the desired future state(s)
 desired_states <- data.frame(variable = 'oChlaEpi',
                              target = 20,
-                             weights = 1)#, 0.5))
+                             weights = 1)
 
 
 ## Update the DATM file and recompile the model ---------------#
@@ -229,12 +229,12 @@ obj_function <- function(val_pars, name_pars, future_states) {
                           CR = 0.9, # crossover probability between 0-1, default in 0.5
                           F = 0.80, # differential weighting factor between 0-2. Default to 0.8
                           itermax = 100, # the maximum iteration (population generation) allowed
-                          reltol = 0.001, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
-                          steptol = 5, # number of minimum ssteps
+                          # reltol = 0.001, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
+                          steptol = 10, # number of minimum ssteps
                           # c = 0.05, strategy = 6, p = 0.10
-                          c = 0.25,  # the speed of crossover adaptation. Between 0-1. Higher c give more weight to the current successful mutations
+                          c = 0.1,  # the speed of crossover adaptation. Between 0-1. Higher c give more weight to the current successful mutations
                           strategy = 6, # DE / current-to-p-best / 1
-                          p = 0.40, # the top (100 * p)% best solutions are used in the mutation
+                          p = 0.1, # the top (100 * p)% best solutions are used in the mutation
                           storepopfrom = 0, # 0 = store all intermediate pops
                           trace = TRUE,
                           parallelType = 'foreach')
