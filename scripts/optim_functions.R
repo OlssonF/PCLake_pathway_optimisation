@@ -9,7 +9,7 @@
 #'
 #' @examples
 
-run_pathway <- function(val_pars, name_pars, initial_conditions = NULL) {
+run_pathway <- function(val_pars, name_pars, current_val, initial_conditions = NULL) {
   
   # For debugging ----------------- #
   # val_pars <- lower_bound
@@ -51,7 +51,7 @@ run_pathway <- function(val_pars, name_pars, initial_conditions = NULL) {
       name2 <- name_pars[lag_pars_lag[i]]
       
       forcing_df <- data.frame(time = 0:(lDATM_SETTINGS_obj$run_settings["dReady", "Set0"]*365)) |> 
-        mutate(value = current_val[name1]) |> # set with a unchanged/current loading)
+        mutate(value = current_val[which(name_pars == name1)]) |> # set with a unchanged/current loading)
         mutate(value = ifelse(time %in% 0:(val_pars[which(name_pars == name2)]*365),
                               value,
                               val_pars[which(name_pars == name1)])) # the values after the first lag are reduced to the parameter value
