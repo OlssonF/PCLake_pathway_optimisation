@@ -16,7 +16,8 @@ library(parallelly)
 
 ## Global settings
 options(scipen = 999) ## no scientific notation
-
+save_output <- TRUE
+example_name <- 2
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases
 ## "scripts" contains only the PCLake functions
@@ -106,22 +107,25 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 ## 6.A Set optimisation values ---------------------------
 
 ### a. Define parameter values -------------------
-# dataframe of parameter ranges (model parameters) and lags 
-
-# Define the parameter values to be optimised
-lower_bound <- c('mPLoadEpi' = 0.001, #minimum Ploading
-                 #'mPLoadEpi_lag' = 1,
-                 'fMarsh_lag' = 5, # need at least a year?
-                 'fMarsh' = 0) # fraction of marsh area relative to lake
-upper_bound <- c('mPLoadEpi' = 0.01,
-                 #'mPLoadEpi_lag' = 10,
-                 'fMarsh_lag' = 20*1, # could be at least 20 year lag
-                 'fMarsh' = 0.2) 
-
-# these are needed to give a value for any variable that is lagged
-current_val <- c('mPLoadEpi' = 0.05,
-                 'fMarsh' = 0) 
+# Define the parameter values to be optimised (upper and lower) as well as
 # the "unchanged" value (before the measure is in place) - could also be a timeseries I guess?
+possible_measures <- read_csv(file.path(project_location, 'possible_measures.csv'), show_col_types = F) |> 
+  filter(parameter %in% c('fMarsh',
+						  'fMarsh_lag',
+						  'mPLoadEpi'))
+
+# see if there are other things required to run the measure optimisation
+for (i in 1:length(possible_measures$parameter)) {
+  if (!is.na(possible_measures$note[i])) {
+  message(possible_measures$parameter[i], ' has requirements: ', possible_measures$note[i])
+  } 
+}
+
+# check for associated parameters required for some optimisations - see possible_measures notes
+if ('fManVeg' %in% possible_measures$parameter) {
+  # fManVeg requires a cDayManVeg1
+  lDATM_SETTINGS$params['cDayManVeg1', "sDefault0"] <- 259 # (259 = 19th Sept)
+}
 
 ### b. Define the desired future ------------------
 # What is the objective
@@ -138,7 +142,7 @@ lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% desired
 
 # forcing variables --------------#
 # anything that is being lagged needs to be in the forcings before compilation
-for (i in names(lower_bound)) {
+for (i in possible_measures$parameter) {
   lag_var <- gsub('_lag', '', i)
   if (str_detect(i, '_lag') & is.null(lDATM_SETTINGS$forcings$sDefault0[[lag_var]])) {
     
@@ -189,8 +193,8 @@ source(file.path(project_location, "scripts/optim_functions.R")) # functions for
 obj_function <- function(val_pars, name_pars, future_states) {
   
   # For debugging ----------------- #
-  # val_pars <- upper_bound
-  # name_pars <- names(lower_bound)
+  # val_pars <- possible_measures$upper_bound
+  # name_pars <- possible_measures$parameter
   # future_states <- desired_states #
   #--------------------------------#
   
@@ -223,16 +227,16 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   doSNOW::registerDoSNOW(cl)
   
-  deoptim_control <- list(NP = 10 * length(lower_bound), #number of population members, should be at least 10 times the length of the parameter
+  deoptim_control <- list(NP = 10 * nrow(possible_measures), #number of population members, should be at least 10 times the length of the parameter
                           CR = 0.9, # crossover probability between 0-1, default in 0.5
                           F = 0.80, # differential weighting factor between 0-2. Default to 0.8
                           itermax = 100, # the maximum iteration (population generation) allowed
-                          reltol = 0.001, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
-                          steptol = 5, # number of minimum ssteps
+                          # reltol = 0.001, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
+                          steptol = 10, # number of minimum ssteps
                           # c = 0.05, strategy = 6, p = 0.10
-                          c = 0.25,  # the speed of crossover adaptation. Between 0-1. Higher c give more weight to the current successful mutations
+                          c = 0.05,  # the speed of crossover adaptation. Between 0-1. Higher c give more weight to the current successful mutations
                           strategy = 6, # DE / current-to-p-best / 1
-                          p = 0.40, # the top (100 * p)% best solutions are used in the mutation
+                          p = 0.1, # the top (100 * p)% best solutions are used in the mutation
                           storepopfrom = 0, # 0 = store all intermediate pops
                           trace = TRUE,
                           parallelType = 'foreach')
@@ -244,11 +248,11 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   set.seed(1234)
   
-  opt_pathway <- DEoptim::DEoptim(lower = lower_bound,
-                                  upper = upper_bound, 
+  opt_pathway <- DEoptim::DEoptim(lower = possible_measures$lower_bound,
+                                  upper = possible_measures$upper_bound, 
                                   fn = obj_function,
                                   control = deoptim_control, 
-                                  name_pars = names(lower_bound),
+                                  name_pars = possible_measures$parameter,
                                   future_states = desired_states)
   
   parallel::stopCluster(cl)
@@ -258,6 +262,11 @@ obj_function <- function(val_pars, name_pars, future_states) {
 # iteration is a generation of a population
 # one population is a collection of members
 # one member is a single run of the objective function with specific parameter values
+# rename all the missing names
+names(opt_pathway$member$lower) <- possible_measures$parameter
+names(opt_pathway$member$upper) <- possible_measures$parameter
+colnames(opt_pathway$member$bestmemit) <- possible_measures$parameter
+names(opt_pathway$optim$bestmem) <- possible_measures$parameter
 
 ## Visualise the best member output from each iteration
 n_iter <- opt_pathway$optim$iter
@@ -268,6 +277,14 @@ iteration_summary <- as.data.frame(opt_pathway$member$bestmemit) |>
 ggplot(iteration_summary, aes(x=fMarsh, y= fMarsh_lag, size = mPLoadEpi, colour = fn_out)) +
   geom_point() +
   scale_color_viridis_c() 
+
+
+# write output for later?------------------------------
+if (save_output) {
+  write_rds(c(list(possible_measures = possible_measures, desired_states = desired_states), opt_pathway$optim),
+            file = file.path(project_location, 'output', paste0('summary_',example_name, '.RData'))) # summary of the optimisation example
+  write_csv(iteration_summary, file = file.path(project_location, 'output',  paste0('bestmemit_',example_name, '.csv'))) # best pathway for each population 
+}
 
 ## 7. Re-run last iteration -----------------
 ### 7.a Exract objective values -----------
@@ -306,7 +323,7 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                  }
 
 last_iteration |> 
-  slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
+  # slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
   ggplot(aes(x=fMarsh_lag, y= fMarsh, size = mPLoadEpi, colour = fn_out)) + 
   geom_point() + 
   scale_colour_viridis_c() 
@@ -320,13 +337,13 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                      .packages=c("tidyverse", "deSolve"),
                      .options.snow = opts) %dopar% {
                        
-                       val_pars <- last_iteration[i,names(lower_bound)] |> unlist()
-                       
-                       name_pars <- last_iteration[i,names(lower_bound)] |> names()
+                       val_pars <- last_iteration[i,possible_measures$parameter] |> unlist()
+                       cur_val <- possible_measures$current_val
+                       name_pars <- last_iteration[i,possible_measures$parameter] |> names()
                        
                        df_pars <- data.frame(variable = name_pars, output = val_pars)
                        
-                       run_pathway(val_pars, name_pars) |>
+                       run_pathway(val_pars, name_pars, cur_val) |>
                          mutate(year = floor((time-1)/365) + 1,
                                 doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                          filter(year == max(year), # filters to summer in the last year of the simulation
@@ -349,6 +366,17 @@ state_opt |>
   facet_wrap(~opt_var, scales = 'free') +
   scale_color_viridis_c(option  = 'A', begin = 1, end = 0)
 
+
+if (save_output) {
+  write_csv(last_iteration, file = file.path(project_location, 'output',  paste0('lastpop_',example_name,'.csv')))  # each member values of the final population
+  
+  state_opt |> 
+    pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
+    pivot_longer(cols = desired_states$variable, names_to = 'opt_var', values_to = 'out') |> 
+    write_delim(file = file.path(project_location, 'output',  paste0('lastpopstate_',example_name, '.txt')))
+}
+
+
 ### 7.c Extract the time series ---------
 # above we extracted the last year (the year being optimised) but in this case we want to 
 # look at the full pathway to acheive the final target
@@ -360,13 +388,13 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                           .packages=c("tidyverse", "deSolve"),
                           .options.snow = opts) %dopar% {
                             
-                            val_pars <- last_iteration[i,names(lower_bound)] |> unlist()
-                            
-                            name_pars <- last_iteration[i,names(lower_bound)] |> names()
+                            val_pars <- last_iteration[i,possible_measures$parameter] |> unlist()
+                            cur_val <- possible_measures$current_val
+                            name_pars <- last_iteration[i,possible_measures$parameter] |> names()
                             
                             df_pars <- data.frame(variable = name_pars, output = val_pars)
                             
-                            run_pathway(val_pars, name_pars) |>
+                            run_pathway(val_pars, name_pars, cur_val) |>
                               mutate(year = floor((time-1)/365) + 1,
                                      doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                               filter(# filters to summer all years of the simulation
@@ -386,3 +414,6 @@ state_pathways |>
   geom_line(aes(colour = fMarsh)) +
   scale_colour_viridis_c(option = 'A')
 
+if (save_output) {
+  write_csv(state_pathways, file = file.path(project_location, 'output',  paste0('lastpoppathways_',example_name,'.csv')))  # the annual output of the final population
+}
