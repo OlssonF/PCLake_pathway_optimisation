@@ -114,11 +114,14 @@ evaluate_pathway <- function(PCLake_output,
   }
   
   if ( sum(!names(eval_target) %in% colnames(PCLake_output)) > 0) {
-    stop("PCLake output doesn't contain the evaluation variables from the eval_target. Either remove from the obj_function or amend future_statees")
+    stop("PCLake output doesn't contain the evaluation variables from the eval_target. Either remove from the obj_function or amend future_states.")
   }
   
+  if(sum(!future_states$variable %in% names(eval_target)) > 0){
+    stop("The list of evaluation functions doesn't include all the desired states.")
+  }
   if (sum(future_states$weights) != 1) {
-    stop("Weights should add to 1")
+    stop("Weights should add to 1.")
   }
   
   # Extract model output and compare with desired state
