@@ -20,7 +20,7 @@ library(parallelly)
 ## Global settings
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
-make_plots <- FALSE
+make_plots <- TRUE
 example_name <- 1
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases
@@ -117,6 +117,7 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 # the "unchanged" value (before the measure is in place) - could also be a timeseries I guess?
 possible_measures <- read_csv(file.path(project_location, 'possible_measures.csv'), show_col_types = F) |> 
   filter(parameter %in% c('mPLoadEpi',
+                          'mPLoadEpi_lag',
                           'fMarsh', 
                           'fMarsh_lag'))
 
@@ -131,6 +132,16 @@ for (i in 1:length(possible_measures$parameter)) {
 if ('fManVeg' %in% possible_measures$parameter) {
   # fManVeg requires a cDayManVeg1
   lDATM_SETTINGS$params['cDayManVeg1', "sDefault0"] <- 259 # (259 = 19th Sept)
+}
+
+if(sum(str_detect(possible_measures$parameter, '_lag')) > 0){
+  
+  lag_var <- gsub('_lag', '', possible_measures$parameter[str_detect(possible_measures$parameter, '_lag')])
+  main_var <- possible_measures$parameter[!str_detect(possible_measures$parameter, '_lag')]
+  
+  if (sum(!lag_var %in% main_var) > 0) {
+    stop('You are missing the main var for a lagged variable!!')
+  }
 }
 
 ### b. Define the desired future ------------------
@@ -209,6 +220,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
+                                  eval_days = 50:100, # try the spring instead
                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target})
                                   # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
                                   #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
@@ -237,7 +249,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
                           CR = 0.9, # crossover probability between 0-1, default in 0.5
                           F = 0.80, # differential weighting factor between 0-2. Default to 0.8
                           itermax = 100, # the maximum iteration (population generation) allowed
-                          # reltol = 0.001, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
+                          #reltol = 0.0001, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
                           steptol = 10, # number of minimum ssteps
                           # c = 0.05, strategy = 6, p = 0.10
                           c = 0.05,  # the speed of crossover adaptation. Between 0-1. Higher c give more weight to the current successful mutations
@@ -337,7 +349,7 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
 
 if (make_plots) {
   p2 <- last_iteration |> 
-    # slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
+    # slice_min(fn_out, prop = 0.5) |> # best (lowest) 25% of values
     ggplot(aes(x=fMarsh_lag, y= fMarsh, size = mPLoadEpi, colour = fn_out)) + 
     geom_point() + 
     scale_colour_viridis_c() +
@@ -366,7 +378,7 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                          mutate(year = floor((time-1)/365) + 1,
                                 doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                          filter(year == max(year), # filters to summer in the last year of the simulation
-                                doy %in% 121:244) |> 
+                                doy %in% 50:100) |> 
                          select(desired_states$variable) |> 
                          summarise(across(any_of(desired_states$variable), mean)) |> 
                          pivot_longer(cols = any_of(desired_states$variable),
@@ -386,9 +398,10 @@ if (make_plots) {
     facet_wrap(~opt_var, scales = 'free') +
     scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
     theme_bw()
+  
   if (save_output) {
     ggsave(plot = p3, filename = file.path(project_location, 'output', 'plots', paste0('lastpopstate_', example_name, '.png')), 
-           width = 12, height = 9, unit = 'cm')
+           width = 12, height = 8, unit = 'cm')
   }
 }
 
@@ -400,7 +413,7 @@ if (save_output) {
   state_opt |> 
     pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
     pivot_longer(cols = desired_states$variable, names_to = 'opt_var', values_to = 'out') |> 
-    write_delim(file = file.path(project_location, 'output',  paste0('lastpopstate_',example_name, '.txt')))
+    write_delim(file = file.path(project_location, 'output',  paste0('lastpopstate_',example_name, '.csv')))
 }
 
 ### 7.c Extract the time series ---------
@@ -424,7 +437,7 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                               mutate(year = floor((time-1)/365) + 1,
                                      doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                               filter(# filters to summer all years of the simulation
-                                doy %in% 121:244) |> 
+                                doy %in% 50:100) |> 
                               select(c('year', desired_states$variable)) |> 
                               group_by(year) |> 
                               summarise(across(any_of(desired_states$variable), mean)) |> 
@@ -439,14 +452,14 @@ if (make_plots) {
   p4 <- state_pathways |> 
     pivot_longer(cols = desired_states$variable, names_to = 'variable', values_to = 'state_val') |> 
     ggplot(aes(y=state_val, x=year, group = ID)) +
-    facet_wrap(~variable, scales = 'free', nrow=2)+
+    facet_wrap(~variable, scales = 'free', nrow=3)+
     geom_vline(aes(xintercept = fMarsh_lag, colour =fMarsh), alpha = 0.7) +
     geom_line() +
     scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
     theme_bw()
   if (save_output) {
     ggsave(plot = p4, filename = file.path(project_location, 'output', 'plots', paste0('lastpoppathways_', example_name, '.png')), 
-           width = 16, height = 8, unit = 'cm')
+           width = 12, height = 12, unit = 'cm')
   }
 }
 
