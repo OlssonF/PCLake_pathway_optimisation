@@ -201,3 +201,55 @@ evaluate_pathway <- function(PCLake_output,
 }
 
 
+#' range_obj
+#'
+#' @param out value being evaluated
+#' @param target vector of values n = 2, lower and upper
+#'
+#' @returns value minimising to zero
+#' @export
+#'
+#' @examples
+range_obj <- function(out, target) {
+  if (length(target) !=2) {
+    stop('Can only take 2 target values')
+  } else {
+    
+    range_vals <- range(c(target,out))
+    fun_val <- (min(target) - range_vals[1] + range_vals[2] - max(target))/mean(target)
+    return(fun_val)
+  }
+}
+
+
+# function(out, lower, upper) {
+#   range_vals <- range(c(lower,upper,out))
+#   fun_val <- (lower - range_vals[1] + range_vals[2] - b)/mean(c(lower,upper))
+#   return(fun_val)
+# }
+
+
+below_obj <- function(out,target){ # below better
+  if (length(target) !=1) {
+    stop('Can only take 1 target value')
+  } else {
+    (out-target)/target
+  }
+  
+}  
+
+exact_obj <- function(out,target){#,  # target exact value
+  if (length(target) !=1) {
+    stop('Can only take 1 target value')
+  } else { 
+    abs(out-target)/target
+  }
+}
+
+above_obj <- function(out,target){ # above better
+  if (length(target) !=1) {
+    stop('Can only take 1 target value')
+  } else {
+    (target-out)/target
+  }     
+}
