@@ -12,9 +12,10 @@
 run_pathway <- function(val_pars, name_pars, current_val, initial_conditions = NULL) {
   
   # For debugging ----------------- #
-  # val_pars <- lower_bound
-  # name_pars <- names(lower_bound)
-  # future_states <- desired_states #
+  # val_pars <- possible_measures$lower_bound
+  # name_pars <- possible_measures$parameter
+  # current_val <- possible_measures$current_val
+  # initial_conditions <- equilibrium_states
   #--------------------------------#
   
   # Setting parameter values -----------#
@@ -110,20 +111,23 @@ evaluate_pathway <- function(PCLake_output,
   # eval_days = 121:244
   #--------------------------------#
   
-  if (sum(!future_states$variable %in% colnames(PCLake_output)) > 0) {
+  if (sum(!names(future_states) %in% colnames(PCLake_output)) > 0) {
     stop("PCLake output doesn't contain the evaluation variables from the future states.")
   }
   
-  if ( sum(!names(eval_target) %in% colnames(PCLake_output)) > 0) {
+  if (sum(!names(eval_target) %in% colnames(PCLake_output)) > 0) {
     stop("PCLake output doesn't contain the evaluation variables from the eval_target. Either remove from the obj_function or amend future_states.")
   }
   
-  if(sum(!future_states$variable %in% names(eval_target)) > 0){
+  if(sum(!names(future_states) %in% names(eval_target)) > 0){
     stop("The list of evaluation functions doesn't include all the desired states.")
   }
-  if (sum(future_states$weights) != 1) {
+  
+  if (sum(unlist(lapply(future_states, get('weights')))) != 1) {
     stop("Weights should add to 1.")
   }
+  
+  
   
   # Extract model output and compare with desired state
   model_output <- PCLake_output |>
@@ -131,9 +135,9 @@ evaluate_pathway <- function(PCLake_output,
            doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
     filter(year == max(year), # filters to summer in the last year of the simulation
            doy %in% eval_days) |> 
-    select(future_states$variable) |> 
-    summarise(across(any_of(future_states$variable), eval_funs)) |> 
-    pivot_longer(cols = any_of(future_states$variable),
+    select(names(future_states)) |> 
+    summarise(across(any_of(names(future_states)), eval_funs)) |> 
+    pivot_longer(cols = any_of(names(future_states)),
                  names_to = 'variable',
                  values_to = 'output')
   
@@ -141,23 +145,25 @@ evaluate_pathway <- function(PCLake_output,
   # Check for matching names across the eval_functions and future states
   if (length(names(eval_target)) > 0) { # if the functions are named check them
     
-    if (sum(stringr::str_equal(names(eval_target), future_states$variable)) != length(future_states$variable)) {
+    if (sum(stringr::str_equal(names(eval_target), names(future_states))) != length(future_states)) {
       stop('the name(s) of your eval_function(s) dont match the future states') 
     } else {
       
       message('matching evaluation function by state')
       
       pathway_error <- model_output |> 
-        full_join(future_states, by = 'variable') |> 
-        mutate(diff= NA)
+        mutate(diff= NA,
+               diff_weighted = NA)
       
       for (i in 1:nrow(pathway_error)) {
         use_fun <- eval_target[[which(names(eval_target) == unlist(pathway_error['variable'][i,]))]]
-        pathway_error$diff[i] <- use_fun(pathway_error$output[i], pathway_error$target[i])
+        pathway_error$diff[i] <- use_fun(pathway_error$output[i], future_states[[which(names(future_states) == pathway_error$variable[i])]]$target)
+        
+        pathway_error$diff_weighted[i] <- pathway_error$diff[i] * future_states[[which(names(future_states) == pathway_error$variable[i])]]$weights
+        
       }
       
       pathway_error <- pathway_error  |> 
-        mutate(diff_weighted = diff * weights) |> 
         summarise(total_error = sum(diff_weighted)) ### IS THIS HOW YOU WOULD SUM THEM????
       
     }
@@ -165,14 +171,22 @@ evaluate_pathway <- function(PCLake_output,
   } else {
     if (length(eval_target) == 1) { # if there is only one function 
       
-      if (nrow(future_states) != 1) { # but multiple states give a warning message
+      if (length(future_states) > 1) { # but multiple states give a warning message
         message('Warning: using a single evaluation function')
       }
       
       pathway_error <- model_output |> 
-        full_join(future_states, by = 'variable') |> 
-        mutate(diff = eval_target[[1]](output, target), 
-               diff_weighted = diff * weights) |> 
+        mutate(diff= NA,
+               diff_weighted = NA)
+      
+      for (i in 1:nrow(model_output)) {
+        pathway_error$diff[i] <- eval_target[[1]](pathway_error$output[i],
+                                                  future_states[[which(names(future_states) == pathway_error$variable[i])]]$target)
+        pathway_error$diff_weighted[i] <- pathway_error$diff[i] * future_states[[which(names(future_states) == pathway_error$variable[i])]]$weights
+        
+      }
+      
+      pathway_error <- pathway_error |> 
         summarise(total_error = sum(diff_weighted)) 
       
     } else {
@@ -180,8 +194,10 @@ evaluate_pathway <- function(PCLake_output,
     }
   }
   
-
+  
   out_val <- pathway_error |> pull(total_error)
   return(out_val)
   
 }
+
+
