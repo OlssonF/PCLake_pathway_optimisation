@@ -154,7 +154,7 @@ desired_states <- list(oChlaEpi = list(target = c(0,20),
 ## Update the DATM file and recompile the model ---------------#
 # Report variables
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 0 # these can be turned off
-lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% desired_states$variable)] <- 1 # report optim vars
+lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% names(desired_states))] <- 1 # report optim vars
 lDATM_SETTINGS$params$iReport[which(rownames(lDATM_SETTINGS$params) %in% possible_measures$parameter)]  # report measure params
 lDATM_SETTINGS$auxils[which(rownames(lDATM_SETTINGS$auxils) %in% 'uPLoadEpi'), ] <- 1 # also report the auxillary variable for the PLoadEpi
 
@@ -223,8 +223,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
                                   future_states = future_states,
                                   eval_days = 50:300, # try the spring instead
                                   eval_funs = max,
-                                  eval_target = list(oChlaEpi = range_obj,
-                                                     sDFiAd = exact_obj) # see optim_functions.R
+                                  eval_target = list(oChlaEpi = range_obj) # see optim_functions.R
                                   
   )
   return(eval_output)
@@ -241,12 +240,13 @@ obj_function <- function(val_pars, name_pars, future_states) {
   clusterEvalQ(cl, library(deSolve))
   clusterExport(cl, list("lDATM_SETTINGS", 'possible_measures', 'equilibrium_states',
                          "PCModelInitializeModel", 
+                         "above_obj", "below_obj", "exact_obj", "range_obj",
                          "dirShell", "nameWorkCase", 'dirHome',
                          "PCmodelSingleRun", "RunModel", 'run_pathway', 'evaluate_pathway'))
   
   doSNOW::registerDoSNOW(cl)
   
-  deoptim_control <- list(NP = 15 * nrow(possible_measures), #number of population members, should be at least 10 times the length of the parameter
+  deoptim_control <- list(NP = 10 * nrow(possible_measures), #number of population members, should be at least 10 times the length of the parameter
                           CR = 0.9, # crossover probability between 0-1, default in 0.5
                           F = 0.80, # differential weighting factor between 0-2. Default to 0.8
                           itermax = 100, # the maximum iteration (population generation) allowed
@@ -380,9 +380,9 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                                 doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                          filter(year == max(year), # filters to summer in the last year of the simulation
                                 doy %in% 50:300) |> 
-                         select(desired_states$variable) |> 
-                         summarise(across(any_of(desired_states$variable), max)) |> 
-                         pivot_longer(cols = any_of(desired_states$variable),
+                         select(names(desired_states)) |> 
+                         summarise(across(any_of(names(desired_states)), max)) |> 
+                         pivot_longer(cols = any_of(names(desired_states)),
                                       names_to = 'variable',
                                       values_to = 'output') |> 
                          bind_rows(df_pars) |> 
@@ -393,8 +393,8 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
 
 if (make_plots) {
   p3 <- state_opt |> 
-    pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
-    pivot_longer(cols = desired_states$variable, names_to = 'opt_var', values_to = 'out') |> 
+    pivot_wider(id_cols = ID, names_from = variable, values_from = output) |>
+    pivot_longer(cols = names(desired_states), names_to = 'opt_var', values_to = 'out') |> 
     ggplot(aes(x=mPLoadEpi, y = out, size = fMarsh_lag, colour = fMarsh)) + geom_point() +
     facet_wrap(~opt_var, scales = 'free') +
     scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
@@ -413,7 +413,7 @@ if (save_output) {
   
   state_opt |> 
     pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
-    pivot_longer(cols = desired_states$variable, names_to = 'opt_var', values_to = 'out') |> 
+    pivot_longer(cols = names(desired_states), names_to = 'opt_var', values_to = 'out') |> 
     write_delim(file = file.path(project_location, 'output',  paste0('lastpopstate_',example_name, '.csv')))
 }
 
@@ -439,9 +439,9 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                                      doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                               filter(# filters to summer all years of the simulation
                                 doy %in% 50:300) |> 
-                              select(c('year', desired_states$variable)) |> 
+                              select(c('year', names(desired_states))) |> 
                               group_by(year) |> 
-                              summarise(across(any_of(desired_states$variable), max)) |> 
+                              summarise(across(any_of(names(desired_states)), max)) |> 
                               bind_cols(pivot_wider(df_pars, names_from = variable, values_from = output)) |>  
                               mutate(ID = i)
                             
@@ -451,7 +451,7 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
 
 if (make_plots) {
   p4 <- state_pathways |> 
-    pivot_longer(cols = desired_states$variable, names_to = 'variable', values_to = 'state_val') |> 
+    pivot_longer(cols = names(desired_states), names_to = 'variable', values_to = 'state_val') |> 
     ggplot(aes(y=state_val, x=year, group = ID)) +
     facet_wrap(~variable, scales = 'free', nrow=3)+
     geom_vline(aes(xintercept = fMarsh_lag, colour =fMarsh), alpha = 0.7) +
