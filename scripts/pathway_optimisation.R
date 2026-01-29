@@ -147,15 +147,16 @@ if(sum(str_detect(possible_measures$parameter, '_lag')) > 0){
 ### b. Define the desired future ------------------
 # What is the objective
 # Define the desired future state(s)
-desired_states <- data.frame(variable = 'oChlaEpi',
-                             target = 20,
-                             weights = 1)
+desired_states <- list(oChlaEpi = list(target = c(0,20),
+                                   weights = 1))
 
 
 ## Update the DATM file and recompile the model ---------------#
 # Report variables
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 0 # these can be turned off
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% desired_states$variable)] <- 1 # report optim vars
+lDATM_SETTINGS$params$iReport[which(rownames(lDATM_SETTINGS$params) %in% possible_measures$parameter)]  # report measure params
+lDATM_SETTINGS$auxils[which(rownames(lDATM_SETTINGS$auxils) %in% 'uPLoadEpi'), ] <- 1 # also report the auxillary variable for the PLoadEpi
 
 # forcing variables --------------#
 # anything that is being lagged needs to be in the forcings before compilation
@@ -220,11 +221,11 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
-                                  eval_days = 50:100, # try the spring instead
-                                  eval_target = list(oChlaEpi = function(out,target){(out-target)/target})
-                                  # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
-                                  #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
-                                  # function(out,target){(target-out)/target}      # above better
+                                  eval_days = 50:300, # try the spring instead
+                                  eval_funs = max,
+                                  eval_target = list(oChlaEpi = range_obj,
+                                                     sDFiAd = exact_obj) # see optim_functions.R
+                                  
   )
   return(eval_output)
 }
@@ -245,16 +246,16 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   doSNOW::registerDoSNOW(cl)
   
-  deoptim_control <- list(NP = 10 * nrow(possible_measures), #number of population members, should be at least 10 times the length of the parameter
+  deoptim_control <- list(NP = 15 * nrow(possible_measures), #number of population members, should be at least 10 times the length of the parameter
                           CR = 0.9, # crossover probability between 0-1, default in 0.5
                           F = 0.80, # differential weighting factor between 0-2. Default to 0.8
                           itermax = 100, # the maximum iteration (population generation) allowed
-                          #reltol = 0.0001, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
+                          reltol = 0.01, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
                           steptol = 10, # number of minimum ssteps
                           # c = 0.05, strategy = 6, p = 0.10
                           c = 0.05,  # the speed of crossover adaptation. Between 0-1. Higher c give more weight to the current successful mutations
                           strategy = 6, # DE / current-to-p-best / 1
-                          p = 0.1, # the top (100 * p)% best solutions are used in the mutation
+                          p = 0.5, # the top (100 * p)% best solutions are used in the mutation
                           storepopfrom = 0, # 0 = store all intermediate pops
                           trace = TRUE,
                           parallelType = 'foreach')
@@ -378,9 +379,9 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                          mutate(year = floor((time-1)/365) + 1,
                                 doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                          filter(year == max(year), # filters to summer in the last year of the simulation
-                                doy %in% 50:100) |> 
+                                doy %in% 50:300) |> 
                          select(desired_states$variable) |> 
-                         summarise(across(any_of(desired_states$variable), mean)) |> 
+                         summarise(across(any_of(desired_states$variable), max)) |> 
                          pivot_longer(cols = any_of(desired_states$variable),
                                       names_to = 'variable',
                                       values_to = 'output') |> 
@@ -437,10 +438,10 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                               mutate(year = floor((time-1)/365) + 1,
                                      doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                               filter(# filters to summer all years of the simulation
-                                doy %in% 50:100) |> 
+                                doy %in% 50:300) |> 
                               select(c('year', desired_states$variable)) |> 
                               group_by(year) |> 
-                              summarise(across(any_of(desired_states$variable), mean)) |> 
+                              summarise(across(any_of(desired_states$variable), max)) |> 
                               bind_cols(pivot_wider(df_pars, names_from = variable, values_from = output)) |>  
                               mutate(ID = i)
                             
