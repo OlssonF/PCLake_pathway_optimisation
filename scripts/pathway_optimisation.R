@@ -21,7 +21,7 @@ library(parallelly)
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
 make_plots <- TRUE
-example_name <- 1
+example_name <- 'single'
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases
 ## "scripts" contains only the PCLake functions
