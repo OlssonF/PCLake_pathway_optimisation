@@ -62,7 +62,7 @@ run_pathway <- function(val_pars, name_pars, current_val, initial_conditions = N
     # what are the time points that things change? (the start t = 0, plus any lag values to implement measures)
     lags_use <- c(0, val_pars[which(name_pars %in% name1)])[order(c(0, val_pars[which(name_pars %in% name1)]))]
     
-    df <- data.frame(l = lags_use*365,
+    df <- data.frame(l = floor(lags_use*365), # round to an integer
                      value = values_use)
     
     
