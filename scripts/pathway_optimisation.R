@@ -13,6 +13,7 @@ library(here)
 library(DEoptim)
 library(doSNOW)
 library(parallelly)
+library(ggh4x)
 
 ## 0. Settings --------------------------
 ##---------------------------------------#
@@ -147,6 +148,9 @@ if(sum(str_detect(possible_measures$parameter, '_lag')) > 0){
 ### b. Define the desired future ------------------
 # What is the objective
 # Define the desired future state(s)
+desired_states_df <- data.frame(opt_var = c('oChlaEpi'),
+                                lower_range = c(0),
+                                upper_range = c(20))
 desired_states <- list(oChlaEpi = list(target = c(0,20),
                                    weights = 1))
 
@@ -221,6 +225,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
+                                  eval_year = 'max', # last year evaluation
                                   eval_days = 50:300, # try the spring instead
                                   eval_funs = max,
                                   eval_target = list(oChlaEpi = range_obj) # see optim_functions.R
@@ -251,11 +256,11 @@ obj_function <- function(val_pars, name_pars, future_states) {
                           F = 0.80, # differential weighting factor between 0-2. Default to 0.8
                           itermax = 100, # the maximum iteration (population generation) allowed
                           reltol = 0.01, # relative convergence tolerance. The algorithm stops if it is unable to reduce the value by a factor of reltol * (abs(val) + reltol) after steptol steps.
-                          steptol = 10, # number of minimum ssteps
+                          steptol = 20, # number of minimum ssteps
                           # c = 0.05, strategy = 6, p = 0.10
                           c = 0.05,  # the speed of crossover adaptation. Between 0-1. Higher c give more weight to the current successful mutations
                           strategy = 6, # DE / current-to-p-best / 1
-                          p = 0.5, # the top (100 * p)% best solutions are used in the mutation
+                          p = 0.1, # the top (100 * p)% best solutions are used in the mutation
                           storepopfrom = 0, # 0 = store all intermediate pops
                           trace = TRUE,
                           parallelType = 'foreach')
@@ -293,7 +298,9 @@ iteration_summary <- as.data.frame(opt_pathway$member$bestmemit) |>
   mutate(fn_out = opt_pathway$member$bestvalit[1:n_iter])
 
 if (make_plots) {
-  p1 <- ggplot(iteration_summary, aes(x=fMarsh, y= fMarsh_lag, size = mPLoadEpi, colour = fn_out)) +
+  p1 <- iteration_summary |> 
+    filter(fn_out <=0) |> 
+    ggplot(aes(x=fMarsh, y= fMarsh_lag, size = mPLoadEpi, colour = mPLoadEpi_lag)) +
     geom_point() +
     scale_color_viridis_c()  +
     theme_bw()
@@ -395,6 +402,9 @@ if (make_plots) {
   p3 <- state_opt |> 
     pivot_wider(id_cols = ID, names_from = variable, values_from = output) |>
     pivot_longer(cols = names(desired_states), names_to = 'opt_var', values_to = 'out') |> 
+    full_join(desired_states_df, by = join_by(opt_var)) |> 
+    filter(between(out, lower_range, upper_range)) |> # check within range
+    filter(n() == nrow(desired_states_df), .by = ID) |> # only where both states pass
     ggplot(aes(x=mPLoadEpi, y = out, size = fMarsh_lag, colour = fMarsh)) + geom_point() +
     facet_wrap(~opt_var, scales = 'free') +
     scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
@@ -451,16 +461,46 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
 
 if (make_plots) {
   p4 <- state_pathways |> 
-    pivot_longer(cols = names(desired_states), names_to = 'variable', values_to = 'state_val') |> 
-    ggplot(aes(y=state_val, x=year, group = ID)) +
-    facet_wrap(~variable, scales = 'free', nrow=3)+
-    geom_vline(aes(xintercept = fMarsh_lag, colour =fMarsh), alpha = 0.7) +
-    geom_line() +
-    scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
-    theme_bw()
+    filter(year == max(state_pathways$year),
+           oChlaEpi <= 20) |> 
+    select(ID) |> 
+    left_join(state_pathways, by = join_by(ID)) |> 
+    mutate(.by = year, ID = row_number()) |> # renumber the pathways 
+    mutate(fMarsh_use = ifelse(fMarsh_lag < year, fMarsh, 0),
+           mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.01))  |> 
+    select(all_of(c('ID', 'year', 'oChlaEpi', 'mPLoadEpi_use', 'fMarsh_use'))) |> 
+    pivot_longer(cols = !any_of(c('ID','year'))) |> 
+    # filter(ID %in% 7:9) |>
+    ggplot(aes(x=year, y = value, 
+               # size = value, 
+               colour = name)) +
+    geom_line(lineend = 'round', linejoin = 'round', linemitre = 1, linewidth = 1) +
+    ggh4x::facet_nested_wrap(vars(ID, name), scales = 'free_y',  nrow = 18, 
+                             strip.position = 'right', dir = 'v', remove_labels = 'y',
+                             nest_line = element_line(colour = 'black'), 
+                             strip = strip_nested(text_y = list(element_text(), 
+                                                                element_text(colour = 'white', 
+                                                                             size = 1)),
+                                                  background_y = list(element_rect(),
+                                                                      element_blank()), 
+                                                  by_layer_y = TRUE)) +
+    theme_bw(base_size = 12) +
+    theme(panel.border = element_rect(colour = 'black'),
+          legend.position = 'top',
+          panel.spacing.y = unit(c( rep( c( rep(0.2,2), 0.6), 5), rep(0.2,2)), "lines")
+          ) +
+    facetted_pos_scales(y = list(name == "fMarsh_use" ~ scale_y_continuous(limits = c(0,1),
+                                                                           n.breaks = 2),
+                                 name == "mPLoadEpi_use" ~ scale_y_continuous(limits = c(0,0.01),
+                                                                              n.breaks = 2),
+                                 name == "oChlaEpi" ~ scale_y_continuous(limits = c(0,200),
+                                                                         n.breaks = 2)
+                                 )
+                        ) +
+    scale_colour_manual(values = c('black', 'orange', 'orchid', 'grey'))
   if (save_output) {
     ggsave(plot = p4, filename = file.path(project_location, 'output', 'plots', paste0('lastpoppathways_', example_name, '.png')), 
-           width = 12, height = 12, unit = 'cm')
+           height = 20, width = 30, units = 'cm')
   }
 }
 
