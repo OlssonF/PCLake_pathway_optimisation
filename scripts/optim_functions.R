@@ -45,23 +45,34 @@ run_pathway <- function(val_pars, name_pars, current_val, initial_conditions = N
   # NOTE: this  only works if there is already something in the forcings and you are just modifying it
   # otherwise you have to recompile the model
   
-  if (length(lag_pars_lag) > 0) {
-    for (i in 1:length(lag_pars)) {
-      
-      name1 <- name_pars[lag_pars[i]]
-      name2 <- name_pars[lag_pars_lag[i]]
-      
-      forcing_df <- data.frame(time = 0:(lDATM_SETTINGS_obj$run_settings["dReady", "Set0"]*365)) |> 
-        mutate(value = current_val[which(name_pars == name1)]) |> # set with a unchanged/current loading)
-        mutate(value = ifelse(time %in% 0:(val_pars[which(name_pars == name2)]*365),
-                              value,
-                              val_pars[which(name_pars == name1)])) # the values after the first lag are reduced to the parameter value
-      
-      lDATM_SETTINGS_obj$forcings$sDefault0[[name1]] <- forcing_df
-      
-    }
-  }
+  unique_lags <- unique(gsub("^\\d+|\\d+$", "", name_pars[lag_pars_lag])) # could have multiple lag values e.g. mPLoadEpi_lag2, so identify the unqiue unnumbered measures
+  unique_names <- unique(gsub("^\\d+|\\d+$", "", name_pars[lag_pars])) 
   
+  for (i in 1:length(unique_lags)) {
+    
+    # extract the names
+    name1 <- name_pars[str_detect(name_pars, unique_lags[i])]
+    name2 <- name_pars[str_detect(name_pars, paste0(unique_names[i], '[^_]', '|',
+                                                    unique_names[i], '$'))]
+    
+    # what are the possible values (current values plus those specified in the pathway parameters)
+    values_use <- c(unique(current_val[which(name_pars %in% name2)]), 
+                    val_pars[which(name_pars == name2)])
+    
+    # what are the time points that things change? (the start t = 0, plus any lag values to implement measures)
+    lags_use <- c(0, val_pars[which(name_pars %in% name1)])[order(c(0, val_pars[which(name_pars %in% name1)]))]
+    
+    df <- data.frame(l = lags_use*365,
+                     value = values_use)
+    
+    
+    forcing_df <- data.frame(time = 0:(lDATM_SETTINGS_obj$run_settings["dReady", "Set0"]*365)) |> 
+      full_join(df, by = join_by(time == l)) |> 
+      fill(value, .direction = 'down')
+    
+    lDATM_SETTINGS_obj$forcings$sDefault0[[unique_names[i]]] <- forcing_df
+    
+  }
   
   # Initialise and run model with these parameters
   
@@ -102,14 +113,15 @@ evaluate_pathway <- function(PCLake_output,
                              future_states,
                              eval_target = list(function(out,target){abs(out-target)/target}),
                              eval_days = 121:244,
-                             eval_funs = mean) {
+                             eval_funs = mean,
+                             eval_year = 'max') {
   
   # For debugging ----------------- #
-  # PCLake_output = PCModel_run
+  # PCLake_output = model_output
   # future_states = desired_states
   # eval_target = list(function(x,y){(x-y)/y})
   # eval_days = 121:244
-  #--------------------------------#
+  # #--------------------------------#
   
   if (sum(!names(future_states) %in% colnames(PCLake_output)) > 0) {
     stop("PCLake output doesn't contain the evaluation variables from the future states.")
@@ -130,10 +142,17 @@ evaluate_pathway <- function(PCLake_output,
   
   
   # Extract model output and compare with desired state
+  if(eval_year == 'max'){
+    eval_year <- PCLake_output |> 
+      mutate(year = floor((time-1)/365) + 1) |> 
+      summarise(max = max(year)) |> 
+      pull()
+  } 
+  
   model_output <- PCLake_output |>
     mutate(year = floor((time-1)/365) + 1,
            doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
-    filter(year == max(year), # filters to summer in the last year of the simulation
+    filter(year == eval_year, # filters to summer in the last year of the simulation
            doy %in% eval_days) |> 
     select(names(future_states)) |> 
     summarise(across(any_of(names(future_states)), eval_funs)) |> 
