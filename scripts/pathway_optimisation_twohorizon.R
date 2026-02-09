@@ -21,7 +21,7 @@ library(ggh4x)
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
 make_plots <- TRUE
-example_name <- 'twohorizon'
+example_name <- 'twohorizon2'
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases
 ## "scripts" contains only the PCLake functions
@@ -118,6 +118,8 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 possible_measures <- read_csv(file.path(project_location, 'possible_measures.csv'), show_col_types = F) |> 
   filter(parameter %in% c('mPLoadEpi',
                           'mPLoadEpi_lag',
+                          'mPLoadEpi2',
+                          'mPLoadEpi_lag2',
                           'fMarsh', 
                           'fMarsh_lag'))
 
@@ -146,33 +148,36 @@ if(sum(str_detect(possible_measures$parameter, '_lag')) > 0){
 
 ### b. Define the desired future ------------------
 # What is the objective
-# Define the desired future state(s)
-desired_states_df1 <- data.frame(opt_var = c('oChlaEpi'),
-                                lower_range = c(0),
-                                upper_range = c(50))
-desired_states1 <- list(oChlaEpi = list(target = c(0, 50),
-                                       weights = 1))
+# Define the desired future state(s) - when there are two horizons being evaluated, include the year in the df
+desired_states_df1 <- data.frame(opt_var = c('oChlaEpi_5'), # needs the year
+                                 lower_range = c(0),
+                                 upper_range = c(50))
+desired_states1 <- list(oChlaEpi = list(target = c(0, 50), # below 50
+                                        weights = 1))
 
-desired_states_df2 <- data.frame(opt_var = c('oChlaEpi'),
+desired_states_df2 <- data.frame(opt_var = c('oChlaEpi_30'),
                                  lower_range = c(0),
                                  upper_range = c(20))
-desired_states2 <- list(oChlaEpi = list(target = c(0,20),
+desired_states2 <- list(oChlaEpi = list(target = c(0,20), # below 20
                                         weights = 1))
 
 
 ## Update the DATM file and recompile the model ---------------#
 # Report variables
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 0 # these can be turned off
-lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% names(desired_states))] <- 1 # report optim vars
+lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% names(desired_states1))] <- 1 # report optim vars
 lDATM_SETTINGS$params$iReport[which(rownames(lDATM_SETTINGS$params) %in% possible_measures$parameter)]  # report measure params
 lDATM_SETTINGS$auxils[which(rownames(lDATM_SETTINGS$auxils) %in% 'uPLoadEpi'), ] <- 1 # also report the auxillary variable for the PLoadEpi
 
 # forcing variables --------------#
 # anything that is being lagged needs to be in the forcings before compilation
-for (i in possible_measures$parameter) {
+
+unique_names <- unique(gsub("^\\d+|\\d+$", "", 
+                            possible_measures$parameter[grep('_lag', possible_measures$parameter)])) # extracts the unique lagged variables (removes multiple lagged e.g. mPLoadEpi_lag2)
+
+for (i in unique_names) {
   lag_var <- gsub('_lag', '', i)
   if (str_detect(i, '_lag') & is.null(lDATM_SETTINGS$forcings$sDefault0[[lag_var]])) {
-    
     
     lDATM_SETTINGS$forcings$sDefault0[[lag_var]] <- data.frame(time = 0:(lDATM_SETTINGS$run_settings["dReady", "Set0"]*365),
                                                                value = -99999) 
@@ -222,12 +227,13 @@ obj_function <- function(val_pars, name_pars, future_states) {
   # For debugging ----------------- #
   # val_pars <- possible_measures$upper_bound
   # name_pars <- possible_measures$parameter
-  # future_states <- desired_states #
+  # future_states <- list(desired_states1, desired_states2) #
   #--------------------------------#
   
   model_output <- run_pathway(val_pars, name_pars, current_val = possible_measures$current_val,
                               initial_conditions = equilibrium_states)
   
+  # Two evaluation steps 1) at year 5, then at the end of the simulation
   eval_output1 <- evaluate_pathway(PCLake_output = model_output, 
                                    future_states = future_states[[1]],
                                    eval_year = 5, # year of first evaluation
@@ -296,7 +302,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
   parallel::stopCluster(cl)
 }
 
-# The output of DEoptim is based on members, iterations, and populations
+ # The output of DEoptim is based on members, iterations, and populations
 # iteration is a generation of a population
 # one population is a collection of members
 # one member is a single run of the objective function with specific parameter values
@@ -365,14 +371,16 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                    name_pars <- last_iteration[i,] |> 
                                      select(-runID) |> names()
                                    
-                                   save <- obj_function(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
+                                   save <- obj_function(val_pars = val_pars, 
+                                                        name_pars = name_pars, 
+                                                        future_states = list(desired_states1, desired_states2))
                                  }
 
 
 if (make_plots) {
   p2 <- last_iteration |> 
-    # slice_min(fn_out, prop = 0.5) |> # best (lowest) 25% of values
-    ggplot(aes(x=fMarsh_lag, y= fMarsh, size = mPLoadEpi, colour = fn_out)) + 
+    filter(fn_out == 0) |> 
+    ggplot(aes(x=fMarsh_lag, y= fMarsh, size = mPLoadEpi, colour = mPLoadEpi_lag)) + 
     geom_point() + 
     scale_colour_viridis_c() +
     theme_bw()
@@ -399,11 +407,12 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                        run_pathway(val_pars, name_pars, cur_val) |>
                          mutate(year = floor((time-1)/365) + 1,
                                 doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
-                         filter(year == max(year), # filters to summer in the last year of the simulation
+                         filter(year %in% c(5,30), # filters to summer in the last year of the simulation
                                 doy %in% 50:300) |> 
-                         select(names(desired_states)) |> 
-                         summarise(across(any_of(names(desired_states)), max)) |> 
-                         pivot_longer(cols = any_of(names(desired_states)),
+                         select(all_of(c('year', names(desired_states1)))) |> 
+                         summarise(across(any_of(names(desired_states1)), max), .by = year) |> 
+                         pivot_wider(names_from = year, values_from = oChlaEpi, names_glue = "{.value}_{year}") |> 
+                         pivot_longer(cols = starts_with(names(desired_states1)),
                                       names_to = 'variable',
                                       values_to = 'output') |> 
                          bind_rows(df_pars) |> 
@@ -415,10 +424,13 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
 if (make_plots) {
   p3 <- state_opt |> 
     pivot_wider(id_cols = ID, names_from = variable, values_from = output) |>
-    pivot_longer(cols = names(desired_states), names_to = 'opt_var', values_to = 'out') |> 
-    full_join(desired_states_df, by = join_by(opt_var)) |> 
+    pivot_longer(cols = paste(names(desired_states1), c(5,30),sep = '_'),
+                 names_to = 'opt_var', values_to = 'out') |> 
+    full_join(bind_rows(desired_states_df1, desired_states_df2),
+              by = join_by(opt_var)) |> 
     filter(between(out, lower_range, upper_range)) |> # check within range
-    filter(n() == nrow(desired_states_df), .by = ID) |> # only where both states pass
+    filter(n() == nrow(bind_rows(desired_states_df1, desired_states_df2)),  
+           .by = ID) |> # only where both states pass
     ggplot(aes(x=mPLoadEpi, y = out, size = fMarsh_lag, colour = fMarsh)) + geom_point() +
     facet_wrap(~opt_var, scales = 'free') +
     scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
@@ -436,8 +448,9 @@ if (save_output) {
   write_csv(last_iteration, file = file.path(project_location, 'output',  paste0('lastpop_',example_name,'.csv')))  # each member values of the final population
   
   state_opt |> 
-    pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
-    pivot_longer(cols = names(desired_states), names_to = 'opt_var', values_to = 'out') |> 
+    pivot_wider(id_cols = ID, names_from = variable, values_from = output) |>
+    pivot_longer(cols = paste(names(desired_states1), c(5,30),sep = '_'),
+                 names_to = 'opt_var', values_to = 'out')|> 
     write_delim(file = file.path(project_location, 'output',  paste0('lastpopstate_',example_name, '.csv')))
 }
 
@@ -463,22 +476,29 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                                      doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                               filter(# filters to summer all years of the simulation
                                 doy %in% 50:300) |> 
-                              select(c('year', names(desired_states))) |> 
+                              select(c('year', names(desired_states1))) |> 
                               group_by(year) |> 
-                              summarise(across(any_of(names(desired_states)), max)) |> 
+                              summarise(across(any_of(names(desired_states1)), max)) |> 
                               bind_cols(pivot_wider(df_pars, names_from = variable, values_from = output)) |>  
                               mutate(ID = i)
                             
                           }
-
+successful_pathways <- state_opt |> 
+  pivot_wider(id_cols = ID, names_from = variable, values_from = output) |>
+  pivot_longer(cols = paste(names(desired_states1), c(5,30),sep = '_'),
+               names_to = 'opt_var', values_to = 'out') |> 
+  full_join(bind_rows(desired_states_df1, desired_states_df2),
+            by = join_by(opt_var)) |> 
+  filter(between(out, lower_range, upper_range)) |> # check within range
+  filter(n() == nrow(bind_rows(desired_states_df1, desired_states_df2)),  
+         .by = ID) |> 
+  distinct(ID) |> 
+  pull(ID)
 
 
 if (make_plots) {
   p4 <- state_pathways |> 
-    filter(year == max(state_pathways$year),
-           oChlaEpi <= 20) |> 
-    select(ID) |> 
-    left_join(state_pathways, by = join_by(ID)) |> 
+    filter(ID %in% successful_pathways) |> 
     mutate(.by = year, ID = row_number()) |> # renumber the pathways 
     mutate(fMarsh_use = ifelse(fMarsh_lag < year, fMarsh, 0),
            mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.01))  |> 
