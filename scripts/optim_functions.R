@@ -63,7 +63,7 @@ run_pathway <- function(val_pars, name_pars, current_val, initial_conditions = N
     lags_use <- c(0, val_pars[which(name_pars %in% name1)])[order(c(0, val_pars[which(name_pars %in% name1)]))]
     
     df <- data.frame(l = floor(lags_use*365), # round to an integer
-                     value = values_use)
+                     value = values_use[order(c(0, val_pars[which(name_pars %in% name1)]))]) # make sure the lag is matched with its associated parameter
     
     
     forcing_df <- data.frame(time = 0:(lDATM_SETTINGS_obj$run_settings["dReady", "Set0"]*365)) |> 
