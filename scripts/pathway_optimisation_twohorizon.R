@@ -151,8 +151,8 @@ if(sum(str_detect(possible_measures$parameter, '_lag')) > 0){
 # Define the desired future state(s) - when there are two horizons being evaluated, include the year in the df
 desired_states_df1 <- data.frame(opt_var = c('oChlaEpi_5'), # needs the year
                                  lower_range = c(0),
-                                 upper_range = c(50))
-desired_states1 <- list(oChlaEpi = list(target = c(0, 50), # below 50
+                                 upper_range = c(100))
+desired_states1 <- list(oChlaEpi = list(target = c(0, 100), # below 100
                                         weights = 1))
 
 desired_states_df2 <- data.frame(opt_var = c('oChlaEpi_30'),
@@ -302,7 +302,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
   parallel::stopCluster(cl)
 }
 
- # The output of DEoptim is based on members, iterations, and populations
+# The output of DEoptim is based on members, iterations, and populations
 # iteration is a generation of a population
 # one population is a collection of members
 # one member is a single run of the objective function with specific parameter values
@@ -320,6 +320,7 @@ iteration_summary <- as.data.frame(opt_pathway$member$bestmemit) |>
 if (make_plots) {
   p1 <- iteration_summary |> 
     filter(fn_out <=0) |> 
+    distinct() |> 
     ggplot(aes(x=fMarsh, y= fMarsh_lag, size = mPLoadEpi, colour = mPLoadEpi_lag)) +
     geom_point() +
     scale_color_viridis_c()  +
@@ -333,7 +334,7 @@ if (make_plots) {
 
 # write output for later?------------------------------
 if (save_output) {
-  write_rds(c(list(possible_measures = possible_measures, desired_states = desired_states), opt_pathway$optim),
+  write_rds(c(list(possible_measures = possible_measures, desired_states = list(desired_states1, desired_states2)), opt_pathway$optim),
             file = file.path(project_location, 'output', paste0('summary_',example_name, '.RData'))) # summary of the optimisation example
   write_csv(iteration_summary, file = file.path(project_location, 'output',  paste0('bestmemit_',example_name, '.csv'))) # best pathway for each population 
 }
@@ -429,7 +430,7 @@ if (make_plots) {
     full_join(bind_rows(desired_states_df1, desired_states_df2),
               by = join_by(opt_var)) |> 
     filter(between(out, lower_range, upper_range)) |> # check within range
-    filter(n() == nrow(bind_rows(desired_states_df1, desired_states_df2)),  
+    filter(n() == nrow(bind_rows(desired_states_df1, desired_states_df2)),
            .by = ID) |> # only where both states pass
     ggplot(aes(x=mPLoadEpi, y = out, size = fMarsh_lag, colour = fMarsh)) + geom_point() +
     facet_wrap(~opt_var, scales = 'free') +
@@ -483,6 +484,7 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                               mutate(ID = i)
                             
                           }
+
 successful_pathways <- state_opt |> 
   pivot_wider(id_cols = ID, names_from = variable, values_from = output) |>
   pivot_longer(cols = paste(names(desired_states1), c(5,30),sep = '_'),
@@ -497,26 +499,37 @@ successful_pathways <- state_opt |>
 
 
 if (make_plots) {
-  p4 <- state_pathways |> 
-    filter(ID %in% successful_pathways) |> 
-    mutate(.by = year, ID = row_number()) |> # renumber the pathways 
-    mutate(fMarsh_use = ifelse(fMarsh_lag < year, fMarsh, 0),
-           mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.01))  |> 
-    select(all_of(c('ID', 'year', 'oChlaEpi', 'mPLoadEpi_use', 'fMarsh_use'))) |> 
-    pivot_longer(cols = !any_of(c('ID','year'))) |> 
+  p4 <- state_pathways |>
+    filter(ID %in% successful_pathways) |>
+    mutate(.by = year, ID = row_number()) |> # renumber the pathways
+    mutate(fMarsh_use = ifelse(fMarsh_lag < year, fMarsh, 0)) |>
+    # this whole convoluted, nested ifelse() generates the timeseries based on the lags of mPLoadEpi
+    mutate(mPLoadEpi_use = ifelse(year < mPLoadEpi_lag &
+                                    year < mPLoadEpi_lag2, 0.01,
+                                  ifelse(year < mPLoadEpi_lag &
+                                           year > mPLoadEpi_lag2, mPLoadEpi2,
+                                         ifelse(year > mPLoadEpi_lag &
+                                                  year < mPLoadEpi_lag2, mPLoadEpi,
+                                                ifelse(year > mPLoadEpi_lag &
+                                                         year > mPLoadEpi_lag2 &
+                                                         mPLoadEpi_lag > mPLoadEpi_lag2, mPLoadEpi, mPLoadEpi2))))) |>
+
+
+    select(all_of(c('ID', 'year', 'oChlaEpi', 'mPLoadEpi_use', 'fMarsh_use'))) |>
+    pivot_longer(cols = !any_of(c('ID','year'))) |>
     # filter(ID %in% 7:9) |>
-    ggplot(aes(x=year, y = value, 
-               # size = value, 
+    ggplot(aes(x=year, y = value,
+               # size = value,
                colour = name)) +
     geom_line(lineend = 'round', linejoin = 'round', linemitre = 1, linewidth = 1) +
-    ggh4x::facet_nested_wrap(vars(ID, name), scales = 'free_y',  nrow = 18, 
+    ggh4x::facet_nested_wrap(vars(ID, name), scales = 'free_y',  nrow = 18,
                              strip.position = 'right', dir = 'v', remove_labels = 'y',
-                             nest_line = element_line(colour = 'black'), 
-                             strip = strip_nested(text_y = list(element_text(), 
-                                                                element_text(colour = 'white', 
+                             nest_line = element_line(colour = 'black'),
+                             strip = strip_nested(text_y = list(element_text(),
+                                                                element_text(colour = 'white',
                                                                              size = 1)),
                                                   background_y = list(element_rect(),
-                                                                      element_blank()), 
+                                                                      element_blank()),
                                                   by_layer_y = TRUE)) +
     theme_bw(base_size = 12) +
     theme(panel.border = element_rect(colour = 'black'),
@@ -528,13 +541,14 @@ if (make_plots) {
                                  name == "mPLoadEpi_use" ~ scale_y_continuous(limits = c(0,0.01),
                                                                               n.breaks = 2),
                                  name == "oChlaEpi" ~ scale_y_continuous(limits = c(0,200),
-                                                                         n.breaks = 2)
+                                                                         n.breaks = 2,
+                                                                         minor_breaks = c(20,100))
     )
     ) +
     scale_colour_manual(values = c('black', 'orange', 'orchid', 'grey'))
   if (save_output) {
     ggsave(plot = p4, filename = file.path(project_location, 'output', 'plots', paste0('lastpoppathways_', example_name, '.png')), 
-           height = 20, width = 30, units = 'cm')
+           height = 20, width = 40, units = 'cm')
   }
 }
 

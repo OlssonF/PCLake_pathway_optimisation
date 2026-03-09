@@ -10,6 +10,7 @@ library(here)
 library(DEoptim)
 library(doSNOW)
 library(parallelly)
+library(ggh4x)
 
 ## 0. Settings --------------------------
 ##---------------------------------------#
@@ -147,7 +148,7 @@ if(sum(str_detect(possible_measures$parameter, '_lag')) > 0){
 # Define the desired future state(s)
 desired_states_df <- data.frame(opt_var = c('oChlaEpi', 'aDSubVeg', 'aDFish'),
                                 lower_range = c(0, 30, 6),
-                                upper_range = c(25, 50, 8))
+                                upper_range = c(55, 50, 8))
 
 desired_states <- list(oChlaEpi = list(target = c(0,55),
                                        weights = 0.5),
