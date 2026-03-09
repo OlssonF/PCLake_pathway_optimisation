@@ -1,10 +1,12 @@
 parameter,upper_bound,lower_bound,current_val,note
 mPLoadEpi,0.01,0.0001,0.01,NA
+mPLoadEpi2,0.01,0.0001,0.01,NA
 fMarsh,1,0,0,NA
 fManVeg,0.9,0,0,must have a day set in cDayManVeg1 (automatically is set to -999999)
 cDayManVeg1,365,1,NA,must have a fManVeg set
 cDredInterval,30,1,NA,must have a cDredStart
 cDredStart,30,1,NA,must have an cDredInterval
-mPLoadEpi_lag,20,1,NA,must have main var
+mPLoadEpi_lag,30,1,NA,must have main var
+mPLoadEpi_lag2,30,1,NA,must have main var
 fMarsh_lag,30,1,NA,must have main var
 fManVeg_lag,30,1,NA,must have main var
