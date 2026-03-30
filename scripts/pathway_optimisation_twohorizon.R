@@ -20,7 +20,7 @@ library(ggh4x)
 ## Global settings
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
-make_plots <- TRUE
+make_plots <- FALSE
 example_name <- 'twohorizon2'
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases

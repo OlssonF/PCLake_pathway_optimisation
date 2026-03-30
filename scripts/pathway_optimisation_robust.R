@@ -17,6 +17,7 @@ library(parallelly)
 ## Global settings
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
+make_plots <- TRUE
 example_name <- 4
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases
@@ -111,8 +112,8 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 # the "unchanged" value (before the measure is in place) - could also be a timeseries I guess?
 possible_measures <- read_csv(file.path(project_location, 'possible_measures.csv'), show_col_types = F) |> 
   filter(parameter %in% c('fMarsh',
-						  'fMarsh_lag', 
-						  'mPLoadEpi'))
+                          'fMarsh_lag', 
+                          'mPLoadEpi'))
 
 # see if there are other things required to run the measure optimisation
 for (i in 1:length(possible_measures$parameter)) {
@@ -130,9 +131,9 @@ if ('fManVeg' %in% possible_measures$parameter) {
 ### b. Define the desired future ------------------
 # What is the objective
 # Define the desired future state(s)
-desired_states <- data.frame(variable = c('oChlaEpi', 'aDFish'),#, 'aSecchiT'),
-                             target = c(20, 6),#, 0.5))
-                             weights = c(0.5,0.5))
+desired_states <- data.frame(variable = c('oChlaEpi'), #, 'aDFish'),#, 'aSecchiT'),
+                             target = c(20),#, 6 0.5))
+                             weights = c(1))
 
 
 ## Update the DATM file and recompile the model ---------------#
@@ -195,21 +196,22 @@ source(file.path(project_location, "scripts/optim_functions.R")) # functions for
 robust_obj_function <- function(val_pars, name_pars, future_states) {
   
   # For debugging ----------------- #
-  # val_pars <- possible_measures$upper_bound
+  # val_pars <- possible_measures$lower_bound
   # name_pars <- possible_measures$parameter
   # future_states <- desired_states #
-  #--------------------------------#
+  # --------------------------------#
   
   # Run the model once with unchanged temperature conditions
   lDATM_SETTINGS$params$sDefault0[str_detect(rownames(lDATM_SETTINGS$params), 'cTmAveEpi')] <- 12
   lDATM_SETTINGS$params$sDefault0[str_detect(rownames(lDATM_SETTINGS$params), 'cTmAveHyp')] <- 5
   
-  model_output1 <- run_pathway(val_pars, name_pars, initial_conditions = equilibrium_states)
+  model_output1 <- run_pathway(val_pars, name_pars,
+                               current_val = possible_measures$current_val,
+                               initial_conditions = equilibrium_states)
   
   eval_output1 <- evaluate_pathway(PCLake_output = model_output1, 
                                    future_states = future_states,
-                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target},
-                                                      aDFish = function(out,target){abs(out-target)/target}))
+                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target}))
   # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
   #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
   #                           # function(out,target){(target-out)/target}      # above better
@@ -221,12 +223,13 @@ robust_obj_function <- function(val_pars, name_pars, future_states) {
   lDATM_SETTINGS$params$sDefault0[str_detect(rownames(lDATM_SETTINGS$params), 'cTmAveEpi')] <- 13
   lDATM_SETTINGS$params$sDefault0[str_detect(rownames(lDATM_SETTINGS$params), 'cTmAveHyp')] <- 5.5
   
-  model_output2 <- run_pathway(val_pars, name_pars, initial_conditions = equilibrium_states)
+  model_output2 <- run_pathway(val_pars, name_pars,
+                               current_val = possible_measures$current_val,
+                               initial_conditions = equilibrium_states)
   
   eval_output2 <- evaluate_pathway(PCLake_output = model_output2, 
                                    future_states = future_states,
-                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target},
-                                                      aDFish = function(out,target){abs(out-target)/target}))
+                                   eval_target = list(oChlaEpi = function(out,target){(out-target)/target}))
   # eval_target = list(oChlaEpi = function(out,target){(out-target)/target},   # below better
   #                    aDFish = function(out,target){abs(out-target)/target}#,  # target exact value
   #                           # function(out,target){(target-out)/target}      # above better
@@ -246,7 +249,7 @@ robust_obj_function <- function(val_pars, name_pars, future_states) {
   cl <- makeSOCKcluster(nC-2)
   clusterEvalQ(cl, library(tidyverse))
   clusterEvalQ(cl, library(deSolve))
-  clusterExport(cl, list("lDATM_SETTINGS", 'current_val', 'equilibrium_states',
+  clusterExport(cl, list("lDATM_SETTINGS", 'possible_measures', 'equilibrium_states',
                          "PCModelInitializeModel", 
                          "dirShell", "nameWorkCase", 'dirHome',
                          "PCmodelSingleRun", "RunModel", 'run_pathway', 'evaluate_pathway'))
@@ -300,9 +303,17 @@ iteration_summary <- as.data.frame(opt_pathway$member$bestmemit) |>
   mutate(fn_out = opt_pathway$member$bestvalit[1:n_iter])
 
 
-ggplot(iteration_summary, aes(x=fMarsh, y= fMarsh_lag, size = mPLoadEpi, colour = fn_out)) +
-  geom_point() +
-  scale_color_viridis_c() 
+if (make_plots) {
+  p1 <- ggplot(iteration_summary, aes(x=fMarsh, y= fMarsh_lag, size = mPLoadEpi, colour = fn_out)) +
+    geom_point() +
+    scale_color_viridis_c()  +
+    theme_bw()
+  if (save_output) {
+    ggsave(plot = p1, filename = file.path(project_location, 'output', 'plots', paste0('bestmemit_', example_name, '.png')), 
+           width = 10, height = 8, unit = 'cm')
+  }
+}
+
 
 # write output for later?------------------------------
 if (save_output) {
@@ -347,11 +358,19 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                    save <- robust_obj_function(val_pars = val_pars, name_pars = name_pars, future_states = desired_states)
                                  }
 
-last_iteration |> 
-  slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
-  ggplot(aes(x=fMarsh_lag, y= fMarsh, size = mPLoadEpi, colour = fn_out)) + 
-  geom_point() + 
-  scale_colour_viridis_c() 
+
+if (make_plots) {
+  p2 <- last_iteration |> 
+    # slice_min(fn_out, prop = 0.25) |> # best (lowest) 25% of values
+    ggplot(aes(x=fMarsh_lag, y= fMarsh, size = mPLoadEpi, colour = fn_out)) + 
+    geom_point() + 
+    scale_colour_viridis_c() +
+    theme_bw()
+  if (save_output) {
+    ggsave(plot = p2, filename = file.path(project_location, 'output', 'plots', paste0('lastpop_', example_name, '.png')), 
+           width = 12, height = 9, unit = 'cm')
+  }
+}
 
 
 ### 7.b Extract the state values -----------
@@ -384,12 +403,20 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                      }
 
 
-state_opt |> 
-  pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
-  pivot_longer(cols = desired_states$variable, names_to = 'opt_var', values_to = 'out') |> 
-  ggplot(aes(x=mPLoadEpi, y = out, size = fMarsh_lag, colour = fMarsh)) + geom_point() +
-  facet_wrap(~opt_var, scales = 'free') +
-  scale_color_viridis_c(option  = 'A', begin = 1, end = 0)
+if (make_plots) {
+  p3 <- state_opt |> 
+    pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
+    pivot_longer(cols = desired_states$variable, names_to = 'opt_var', values_to = 'out') |> 
+    ggplot(aes(x=mPLoadEpi, y = out, size = fMarsh_lag, colour = fMarsh)) + geom_point() +
+    facet_wrap(~opt_var, scales = 'free') +
+    scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
+    theme_bw()
+  
+  if (save_output) {
+    ggsave(plot = p3, filename = file.path(project_location, 'output', 'plots', paste0('lastpopstate_', example_name, '.png')), 
+           width = 12, height = 8, unit = 'cm')
+  }
+}
 
 if (save_output) {
   write_csv(last_iteration, file = file.path(project_location, 'output',  paste0('lastpop_',example_name,'.csv')))  # each member values of the final population
@@ -397,7 +424,7 @@ if (save_output) {
   state_opt |> 
     pivot_wider(id_cols = ID, names_from = variable, values_from = output) |> 
     pivot_longer(cols = desired_states$variable, names_to = 'opt_var', values_to = 'out') |> 
-    write_delim(file = file.path(project_location, 'output',  paste0('lastpopstate_',example_name, '.txt')))
+    write_delim(file = file.path(project_location, 'output',  paste0('lastpopstate_',example_name, '.csv')))
 }
 
 ### 7.c Extract the time series ---------
@@ -429,13 +456,23 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                               mutate(ID = i)
                             
                           }
-state_pathways |> 
-  pivot_longer(cols = desired_states$variable, names_to = 'variable', values_to = 'state_val') |> 
-  ggplot(aes(y=state_val, x=year, group = ID, colour = fMarsh)) +
-  facet_wrap(~variable, scales = 'free', nrow=2)+
-  # geom_vline(aes(xintercept = fMarsh_lag, colour =fMarsh), alpha = 0.7) +
-  geom_line(aes(colour = fMarsh)) +
-  scale_colour_viridis_c(option = 'A')
+
+if (make_plots) {
+  p4 <- state_pathways |> 
+    pivot_longer(cols = desired_states$variable, names_to = 'variable', values_to = 'state_val') |> 
+    ggplot(aes(y=state_val, x=year, group = ID)) +
+    facet_wrap(~variable, scales = 'free', nrow=3)+
+    geom_vline(aes(xintercept = fMarsh_lag, colour =fMarsh), alpha = 0.7) +
+    geom_line() +
+    scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
+    theme_bw()
+  if (save_output) {
+    ggsave(plot = p4, filename = file.path(project_location, 'output', 'plots', paste0('lastpoppathways_', example_name, '.png')), 
+           width = 12, height = 12, unit = 'cm')
+  }
+}
+
+
 
 if (save_output) {
   write_csv(state_pathways, file = file.path(project_location, 'output',  paste0('lastpoppathways_',example_name,'.csv')))  # the annual output of the final population
