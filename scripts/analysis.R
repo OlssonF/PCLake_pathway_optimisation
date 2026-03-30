@@ -54,8 +54,8 @@ names(lastpoppathways) <- gsub('.csv', '',
 
 
 # Aesthetics --------------------------------------------------------------
-labels_measures <- c(expression(atop('P load', (mg~L^-1))),
-                     expression(atop('P load', (mg~L^-1))),
+labels_measures <- c(expression(atop('P load', (gP~m^-2~d^-1))),
+                     expression(atop('P load', (gP~m^-2~d^-1))),
                      # expression(paste("P load\n(mg ", L^-1, ")")),
                      # expression(paste("P load\n(mg ", L^-1, ")")), 
                      expression(atop("Marsh area", "(fraction)")),
@@ -386,7 +386,7 @@ ggarrange(lastpopstate$lastpopstate_multiES |>
                                                                  label_parsed))) +
             theme(legend.position = 'right') +
             theme_bw() +
-            labs(x = expression(P~load~(mg ~ L^-1))) +
+            labs(x = expression(P~load~(gP~m^-2~d^-1))) + 
             labs(dictionary = labels_measures), 
           
           nrow = 2, align = 'hv') |> 
