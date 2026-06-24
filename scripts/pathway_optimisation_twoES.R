@@ -19,7 +19,7 @@ library(ggh4x)
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
 make_plots <- FALSE
-example_name <- 'multiES'
+example_name <- 'multiES_mega'
 
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases
@@ -118,7 +118,9 @@ possible_measures <- read_csv(file.path(project_location, 'possible_measures.csv
   filter(parameter %in% c('mPLoadEpi',
                           'mPLoadEpi_lag',
                           'fManVeg',
-                          'fManVeg_lag'))
+                          'fManVeg_lag', 
+                          'fMarsh',
+                          'fMarsh_lag'))
 
 # see if there are other things required to run the measure optimisation
 for (i in 1:length(possible_measures$parameter)) {
@@ -151,11 +153,11 @@ desired_states_df <- data.frame(opt_var = c('oChlaEpi', 'aDSubVeg', 'aDFish'),
                                 upper_range = c(55, 50, 8))
 
 desired_states <- list(oChlaEpi = list(target = c(0,55),
-                                       weights = 0.5),
+                                       weights = 1/3),
                        aDSubVeg = list(target = c(30, 50),
-                                       weights = 0.25),
+                                       weights = 1/3),
                        aDFish = list(target = c(6, 8),
-                                       weights = 0.25))
+                                       weights = 1/3))
 
 
 
@@ -318,7 +320,12 @@ if (make_plots) {
 if (save_output) {
   write_rds(c(list(possible_measures = possible_measures, desired_states = desired_states), opt_pathway$optim),
             file = file.path(project_location, 'output', paste0('summary_',example_name, '.RData'))) # summary of the optimisation example
-  write_csv(iteration_summary, file = file.path(project_location, 'output',  paste0('bestmemit_',example_name, '.csv'))) # best pathway for each population 
+  write_csv(iteration_summary, file = file.path(project_location, 'output',  paste0('bestmemit_',example_name, '.csv'))) # best pathway for each population
+  
+  # write every population out
+  lapply(opt_pathway$member$storepop, as.data.frame, row.names = F) |> 
+    list_rbind(names_to = 'iteration') |> 
+    write_csv(file = file.path(project_location, 'output',  paste0('all_pops',example_name, '.csv')))
 }
 
 ## 7. Re-run last iteration -----------------
