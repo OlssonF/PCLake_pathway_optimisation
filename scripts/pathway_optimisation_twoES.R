@@ -454,7 +454,7 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                             
                             df_pars <- data.frame(variable = name_pars, output = val_pars)
                             
-                            run_pathway(val_pars, name_pars, cur_val) |>
+                            run_pathway(val_pars, name_pars, cur_val, initial_conditions = equilibrium_states) |> 
                               mutate(year = floor((time-1)/365) + 1,
                                      doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                               filter(# filters to summer all years of the simulation
