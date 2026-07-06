@@ -38,19 +38,26 @@ names(lastpop) <- gsub('.csv', '',
                        basename(list.files('output', 'lastpop_', full.names = TRUE)))
 
 
-## Last iteration population, obj_function output
+## Last iteration population, calculate the state values
 lastpopstate <- lapply(list.files('output', 'lastpopstate_', full.names = TRUE),
                        read_delim, show_col_types = F)
 names(lastpopstate) <- gsub('.csv', '', 
                             basename(list.files('output', 'lastpopstate_', full.names = TRUE)))
 
 
-## Last iteration population, obj_function output
+## Last iteration population, state values for the full ts
 lastpoppathways <- lapply(list.files('output', 'lastpoppathways_', full.names = TRUE),
                           read_csv, show_col_types = F)
 
 names(lastpoppathways) <- gsub('.csv', '', 
                                basename(list.files('output', 'lastpoppathways_', full.names = TRUE)))
+
+## All populations, obj_function output
+allpop <- lapply(list.files('output', 'allpops_', full.names = TRUE),
+                          read_csv, show_col_types = F)
+
+names(allpop) <- gsub('.csv', '', 
+                      basename(list.files('output', 'allpops_', full.names = TRUE)))
 
 
 # Aesthetics --------------------------------------------------------------
@@ -62,25 +69,37 @@ labels_measures <- c(expression(atop('P load', (gP~m^-2~d^-1))),
                      expression(atop("Vegetation removed", "(fraction)")),
                      expression(atop("Day of vegetation", "removal (day of year)")),
                      "cDredInterval", "cDredStart",
-                     expression(atop("Start P load", "(year)")),
-                     expression(atop("Start P load", "(year)")),
+                     expression(atop("Start P load", "reduction (year)")),
+                     expression(atop("Start P load", "reduction (year)")),
                      expression(atop("Start marsh", " area (year)")),
-                     expression(atop("Start vegetation", "removal (year)")))
+                     expression(atop("Start vegetation", "removal (year)")),
+                     expression(atop("Reduction in P load", "(%)")))
 
 
 
-names(labels_measures) <- c(possible_measures$parameter)
+names(labels_measures) <- c(possible_measures$parameter, "mPLoadEpi_change")
 cols_measures <- c("#3E4A89FF",
                    "#3E4A89FF",
                    "#6DCD59FF",
                    "#F89441FF",
                    "grey",
                    "grey", "grey",
-                   "grey",
-                   "grey",
-                   "grey",
-                   "grey")
+                   "#3E4A89FF",
+                   "#3E4A89FF",
+                   "#6DCD59FF",
+                   "#F89441FF",
+                   "#3E4A89FF")
 
+shapes_measures <- c(16,16,16,16,
+                   1,1, 1,
+                   2,2,2,2,16)
+
+lines_measures <- c(rep('solid',4),
+                     rep('dotted',3),
+                     rep('dashed', 4),
+                    'solid')
+
+cols_states <- c("#C7EF34FF", "#36AAF9FF", "#7A0403FF")
 
 labels_states <- c(oChlaEpi =expression(atop('Chlorophyll-a concentration', (mu*g~L^-1))),
                    aDSubVeg =expression(atop('Submerged vegetation biomass', (gDW~m^-2))),
@@ -89,6 +108,21 @@ labels_states <- c(oChlaEpi =expression(atop('Chlorophyll-a concentration', (mu*
 labels_states_str <- c(oChlaEpi = "atop('Chlorophyll-a concentration', (mu*g~L^-1))",
                        aDSubVeg = "atop('Submerged vegetation biomass', (gDW~m^-2))",
                        aDFish   = "atop('Benthivorous fish biomass', (gDW~m^-2))")
+
+labels_measures_str <- c(mPLoadEpi = "atop('P load', (gP~m^-2~d^-1))",
+                       mPLoadEpi2 = "atop('P load', (gP~m^-2~d^-1))",
+                       fMarsh = "atop('Marsh area', '(fraction)')",
+                       fManVeg = "atop('Vegetation removed', '(fraction)')",
+                       cDayManVeg1 = "atop('Day of vegetation', 'removal (day of year)')",
+                       cDredInterval = 'cDredInterval', cDredStart =  'cDredStart',
+                       mPLoadEpi_lag = "atop('Start P load', 'reduction(year)')",
+                       mPLoadEpi_lag2 = "atop('Start P load', 'reduction (year)')",
+                       fMarsh_lag = "atop('Start marsh', ' area (year)')",
+                       fManVeg_lag = "atop('Start vegetation', 'removal (year)')",
+                       mPLoadEpi_change = "atop('Reduction in P load', '(%)')")
+
+
+
 #
 # PS1 - Single ----------------------------------------------------------------
 summary_single$iter
@@ -127,7 +161,7 @@ single_parallel <- lastpop$lastpop_single |>
   theme(axis.text.x = element_text(vjust = -0.5, hjust = 0.5))
 
 ggarrange(single_scatter, single_parallel, widths = c(1,0.7), align = 'h',
-          labels = c("A)", "B)"), label.x = -0.01) |> 
+          labels = c("A)", "B)"), label.x = -0.002) |> 
   ggsave(filename = './output/plots/figure_2.png', width = 24, height = 12, unit = 'cm')
 
 # PS2 - Two horizon --------------------------------------------
@@ -179,7 +213,7 @@ pathways_2h <- lastpoppathways$lastpoppathways_twohorizon2 |>
   mutate(fMarsh_use = ifelse(fMarsh_lag < year, fMarsh, 0)) |>
   # this whole convoluted, nested ifelse() generates the timeseries based on the lags of mPLoadEpi
   mutate(mPLoadEpi_use = ifelse(year < mPLoadEpi_lag &
-                                  year < mPLoadEpi_lag2, 0.01,
+                                  year < mPLoadEpi_lag2, 0.002,
                                 ifelse(year < mPLoadEpi_lag &
                                          year > mPLoadEpi_lag2, mPLoadEpi2,
                                        ifelse(year > mPLoadEpi_lag &
@@ -212,7 +246,7 @@ pathways_2h <- lastpoppathways$lastpoppathways_twohorizon2 |>
         panel.spacing.y = unit(c( rep( c( rep(0.3,2), 0.7), 1), rep(0.3,2)), "lines")) +
   facetted_pos_scales(y = list(name == "fMarsh" ~ scale_y_continuous(limits = c(0,1),
                                                                      n.breaks = 2),
-                               name == "mPLoadEpi" ~ scale_y_continuous(limits = c(0,0.01),
+                               name == "mPLoadEpi" ~ scale_y_continuous(limits = c(0,0.002),
                                                                         n.breaks = 2),
                                name == "oChlaEpi" ~ scale_y_continuous(limits = c(0,200),
                                                                        n.breaks = 2,
@@ -269,12 +303,22 @@ multi_parallel <- lastpop$lastpop_multi |>
   theme(axis.text.x = element_text(vjust = -0.5, hjust = 0.5))
 
 ggarrange(multi_scatter, multi_parallel, widths = c(1,0.8), align = 'h',
-          labels = c("A)", "B)"), label.x = -0.01) |> 
+          labels = c("A)", "B)"), label.x = -0.002) |> 
   ggsave(filename = './output/plots/figure_S3.png', width = 24, height = 12, unit = 'cm')
 
 # PS4 - MultiES -----------------------------------------
 summary_multiES$iter
 nrow(lastpop$lastpop_multiES)
+
+summary_multiES$desired_states
+
+multiES_ds <- data.frame(opt_var = names(summary_multiES$desired_states),
+                         lower_range = sapply(summary_multiES$desired_states,
+                                              function(x) min(x$target)),
+                         upper_range = sapply(summary_multiES$desired_states,
+                                              function(x) max(x$target))) |> 
+  mutate(opt_var_val = row_number())
+
 
 lastpop$lastpop_multiES |> 
   #   # filter(fn_out <= 0) |> 
@@ -292,61 +336,59 @@ lastpop$lastpop_multiES |>
   slice_min(fn_out) |> # lowest objective function
   inner_join(lastpopstate$lastpopstate_multiES) # what were the associated states
 
-best_multiES <- lastpop$lastpop_multiES |> 
+# best_multiES <-
+  lastpop$lastpop_multiES |> 
   slice_min(fn_out) |> # lowest objective function
   select(runID) |> 
   left_join(lastpoppathways$lastpoppathways_multiES, by = join_by(runID == ID)) |> 
   mutate(.by = year, ID = row_number()) |> # renumber the pathways 
   mutate(fManVeg_use = ifelse(fManVeg_lag < year, fManVeg, 0),
-         mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.01))  |> 
+         mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.002))  |> 
   
   mutate(fManVeg = fManVeg_use,
-         mPLoadEpi = mPLoadEpi_use) |> 
+         mPLoadEpi = mPLoadEpi_use,
+         mPLoadEpi_reduction = (0.002 - mPLoadEpi)/0.002) |> 
   
-  select(all_of(c('ID', 'year', 'aDSubVeg', 'aDFish', 'oChlaEpi', 'mPLoadEpi', 'fManVeg'))) |> #'aDFish'
-  pivot_longer(cols = !any_of(c('ID','year'))) |> 
+  select(all_of(c('ID', 'year', 'aDSubVeg', 'aDFish', 'oChlaEpi', 'mPLoadEpi_reduction', 'fManVeg'))) |> #'aDFish'
+  pivot_longer(cols = !any_of(c('ID','year')), names_to = 'opt_var') |> 
+  full_join(multiES_ds, by = join_by(opt_var)) |>
+  mutate(opt_var = factor(opt_var, levels = c("mPLoadEpi_reduction", 'fManVeg', 'oChlaEpi', 'aDSubVeg', 'aDFish'))) |> 
   ggplot(aes(x=year, y = value, 
              # size = value, 
-             colour = name)) +
+             colour = opt_var)) +
   geom_line(lineend = 'round', linejoin = 'round', linemitre = 1, linewidth = 1) +
-  ggh4x::facet_nested_wrap(vars(name), scales = 'free_y',  nrow = 16,
+  ggh4x::facet_nested_wrap(vars(opt_var), scales = 'free_y',  nrow = 16,
                            strip.position = 'right', dir = 'v', remove_labels = 'y',
                            nest_line = element_line(colour = 'black')) +
   theme_bw(base_size = 12) +
   theme(panel.border = element_rect(colour = 'black'),
         legend.position = 'top', 
         strip.background = element_blank(),
-        strip.text = element_blank()
-        # panel.spacing.y = unit(c( rep( c( rep(0.2,3), 0.6), 3), rep(0.2,3)),"lines")
-  ) +
+        strip.text = element_blank(),
+        panel.spacing.y = unit(c(0.4, 1.2, 0.4, 0.4),"lines")) +
   guides(color=guide_legend(nrow=2, byrow=TRUE, title = '')) +
-  facetted_pos_scales(y = list(name == "fManVeg" ~ scale_y_continuous(limits = c(0,1),
-                                                                      n.breaks = 2),
-                               name == "mPLoadEpi" ~ scale_y_continuous(limits = c(0,0.01),
-                                                                        n.breaks = 2),
-                               name == "oChlaEpi" ~ scale_y_continuous(limits = c(0,200),
+  facetted_pos_scales(y = list(opt_var == "fManVeg" ~ scale_y_continuous(limits = c(0,1),
+                                                                      n.breaks = 4),
+                               opt_var == "mPLoadEpi_reduction" ~ scale_y_continuous(limits = c(0,1),
+                                                                        n.breaks = 4),
+                               opt_var == "oChlaEpi" ~ scale_y_continuous(limits = c(0,100),
                                                                        n.breaks = 2),
-                               name == "aDSubVeg" ~ scale_y_continuous(limits = c(0,100),
+                               opt_var == "aDSubVeg" ~ scale_y_continuous(limits = c(0,100),
                                                                        n.breaks = 2),
-                               name == "aDFish" ~ scale_y_continuous(limits = c(0,10),
+                               opt_var == "aDFish" ~ scale_y_continuous(limits = c(0,10),
                                                                      n.breaks = 2))) +
-  scale_colour_manual(values = c('grey20', 'seagreen','gold', cols_measures), 
+  scale_colour_manual(values = c(cols_states, cols_measures), 
                       name = 'Lake state',
                       breaks = c(names(labels_states), names(labels_measures)), 
-                      labels = c(labels_states, labels_measures))
+                      labels = c(labels_states, labels_measures)) +
+  labs(x='Year', y = '') +
+  geom_hline(aes(yintercept = lower_range), linetype = 'dashed') +
+  geom_hline(aes(yintercept = upper_range), linetype = 'dashed') 
+
 ggsave(best_multiES, filename = 'output/plots/figure_S4.png',
        height = 18, width = 18, units = 'cm')
 
 # out of all the pathways how many achieve each of the indicator targets
-summary_multiES$desired_states
-
-multiES_ds <- data.frame(opt_var = names(summary_multiES$desired_states),
-                         lower_range = sapply(summary_multiES$desired_states,
-                                              function(x) min(x$target)),
-                         upper_range = sapply(summary_multiES$desired_states,
-                                              function(x) max(x$target))) |> 
-  mutate(opt_var_val = row_number())
-
 lastpopstate$lastpopstate_multiES |> 
   full_join(multiES_ds, by = join_by(opt_var)) |> 
   filter(between(out, lower_range, upper_range)) |>
@@ -437,7 +479,7 @@ lastpopstate$lastpopstate_multiES |>
   arrange(var)
 
 
-
+#
 # PS5 - Prioritised -------------------------------------
 summary_prioritisation$iter
 nrow(lastpop$lastpop_prioritisation)
@@ -465,7 +507,7 @@ best_prior <- lastpop$lastpop_prioritisation |>
   left_join(lastpoppathways$lastpoppathways_multiES, by = join_by(runID == ID)) |> 
   mutate(.by = year, ID = row_number()) |> # renumber the pathways 
   mutate(fManVeg_use = ifelse(fManVeg_lag < year, fManVeg, 0),
-         mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.01))  |> 
+         mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.002))  |> 
   
   mutate(fManVeg = fManVeg_use,
          mPLoadEpi = mPLoadEpi_use) |> 
@@ -489,7 +531,7 @@ best_prior <- lastpop$lastpop_prioritisation |>
   guides(color=guide_legend(nrow=2, byrow=TRUE, title = '')) +
   facetted_pos_scales(y = list(name == "fManVeg" ~ scale_y_continuous(limits = c(0,1),
                                                                       n.breaks = 2),
-                               name == "mPLoadEpi" ~ scale_y_continuous(limits = c(0,0.01),
+                               name == "mPLoadEpi" ~ scale_y_continuous(limits = c(0,0.002),
                                                                         n.breaks = 2),
                                name == "oChlaEpi" ~ scale_y_continuous(limits = c(0,200),
                                                                        n.breaks = 2),
@@ -619,7 +661,7 @@ fish_multiES <- lastpopstate$lastpopstate_multiES |>
   select(ID) |> 
   left_join(lastpoppathways$lastpoppathways_multiES, by = join_by(ID)) |> 
   mutate(fManVeg_use = ifelse(fManVeg_lag < year, fManVeg, 0),
-         mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.01))  |> 
+         mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.002))  |> 
   
   mutate(fManVeg = fManVeg_use,
          mPLoadEpi = mPLoadEpi_use) |> 
@@ -643,7 +685,7 @@ fish_multiES <- lastpopstate$lastpopstate_multiES |>
   guides(color=guide_legend(nrow=2, byrow=TRUE, title = '')) +
   facetted_pos_scales(y = list(name == "fManVeg" ~ scale_y_continuous(limits = c(0,1),
                                                                       n.breaks = 2),
-                               name == "mPLoadEpi" ~ scale_y_continuous(limits = c(0,0.01),
+                               name == "mPLoadEpi" ~ scale_y_continuous(limits = c(0,0.002),
                                                                         n.breaks = 2),
                                name == "oChlaEpi" ~ scale_y_continuous(limits = c(0,200),
                                                                        n.breaks = 2),
