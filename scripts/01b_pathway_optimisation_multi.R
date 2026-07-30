@@ -37,8 +37,8 @@ dirSave <- dirShell
 # ----------------------------------------------------------------------------- #
 
 ## load external functions from the scripts folder
-source(file.path(dirShell, "scripts", "R_system", "functions.R"))
-source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.R")) 
+source(file.path(dirShell, "scripts", "R_system", "functions.r"))
+source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.r")) 
 
 
 ## Order of actions to run PCLake in R
