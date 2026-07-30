@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 output/
+model_code/
+source_cpp/
+source_cpp_adjusted/
