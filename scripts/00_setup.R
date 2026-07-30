@@ -23,6 +23,8 @@ required_packages <- c(
 
 install.packages(required_packages)
 
+#
+
 #------------------------------------------#
 # ----- 2. Set up the workcase -------------
 #------------------------------------------#
@@ -36,8 +38,6 @@ dirHome <- str_split(project_location,  "(?=PCModel1350)", simplify = T)[1,1]	# 
 dirShell <- str_split(project_location,  "(?<=PCShell)", simplify = T)[1,1]	#  PCShell folder path
 dirCpp_root <- list.dirs(dirHome)[which(str_detect(list.dirs(dirHome),"3.01/PCLake_plus"))] # location of C++ code
 nameWorkCase <- tail(str_split_1(project_location, "/"), n = 1) # workcase name
-fileDATM <- list.files(list.dirs(dirHome)[which(str_detect(list.dirs(dirHome), "PCLake\\+/6.13.16"))], DATM_file, full.names = T)
-folderTXT <- file.path(project_location, 'input', 'drivers_txt')
 dirSave <- dirShell
 
 # Load PCLake functions from the main repository
@@ -48,3 +48,21 @@ source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.R"))
 PCModelWorkCaseSetup(dirSHELL = dirShell, 
                      dirCPP_ROOT = dirCpp_root,
                      nameWORKCASE = nameWorkCase)
+
+#
+
+# -----------------------------------------#
+# ----- 3. Copy the DATM file across -------
+# -----------------------------------------#
+copy_datm <- file.copy(file.path(project_location, DATM_file),
+                       file.path(str_remove(dirShell, "/[^/]+$"), DATM_file),
+                       overwrite = F) # does not overwrite an existing DATM with the same name
+if (copy_datm) {
+  message("DATM copied to right folder")
+} else {
+  message("A DATM file with that name already exists")
+}
+
+fileDATM <- file.path(str_remove(dirShell, "/[^/]+$"), DATM_file)
+
+
