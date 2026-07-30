@@ -26,11 +26,13 @@ example_name <- 'multiES_mega'
 ## "scripts" contains only the PCLake functions
 
 project_location <- here()
+DATM_file <- "PL613162PLUS_pathway_optim.xls"
+
 dirHome <- str_split(project_location,  "(?=PCModel1350)", simplify = T)[1,1]	# location of the PCModel1350 folder
 dirShell <- str_split(project_location,  "(?<=PCShell)", simplify = T)[1,1]	#  PCShell folder path
 dirCpp_root <- list.dirs(dirHome)[which(str_detect(list.dirs(dirHome),"3.01/PCLake_plus"))] # location of C++ code
 nameWorkCase <- tail(str_split_1(project_location, "/"), n = 1) # workcase name
-fileDATM <- list.files(list.dirs(dirHome)[which(str_detect(list.dirs(dirHome), "PCLake\\+/6.13.16"))], "PL613162PLUS_pathway_optim.xls", full.names = T)
+fileDATM <- list.files(list.dirs(dirHome)[which(str_detect(list.dirs(dirHome), "PCLake\\+/6.13.16"))], DATM_file, full.names = T)
 folderTXT <- file.path(project_location, 'input', 'drivers_txt')
 dirSave <- dirShell
 # ----------------------------------------------------------------------------- #
@@ -71,7 +73,7 @@ lDATM_SETTINGS <- PCModelReadDATMFile_PCLakePlus(fileXLS = fileDATM,
 ## Might be a good idea to make sure the default lake parameters are loaded
 
 # Report restart variables
-restart_states <- read_table(file.path(project_location, 'restart_states.txt'), col_names = 'state', show_col_types = F)
+restart_states <- read_table(file.path(project_location,'input', 'restart_states.txt'), col_names = 'state', show_col_types = F)
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 1 # report these in the output
 
 
@@ -114,7 +116,7 @@ equilibrium_states <- prepInitials(listPCModelRun = PCModel_run_baseline,
 
 # Define the parameter values to be optimised (upper and lower) as well as
 # the "unchanged" value (before the measure is in place) - could also be a timeseries I guess?
-possible_measures <- read_csv(file.path(project_location, 'possible_measures.csv'), show_col_types = F) |> 
+possible_measures <- read_csv(file.path(project_location,'input', 'possible_measures.csv'), show_col_types = F) |> 
   filter(parameter %in% c('mPLoadEpi',
                           'mPLoadEpi_lag',
                           'fManVeg',
@@ -205,7 +207,7 @@ PCModelCompileModelWorkCase(dirSHELL = dirShell,
 # 2) extract output
 # 3) return a minimised value by comparing with desired future (DEOptim will make the value as negative as possible)
 
-source(file.path(project_location, "scripts/optim_functions.R")) # functions for running and evaluating the pathways
+source(file.path(project_location, "R/optim_functions.R")) # functions for running and evaluating the pathways
 
 #' Define the objective function with the output to be optimised
 #'
