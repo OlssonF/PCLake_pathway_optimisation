@@ -1,3 +1,16 @@
+#--------------------------------------#
+## Project: Pathway Optimisation Framework
+## Script purpose: Example problem scenario comparisons - read in, plot, and summarise the 
+## Date: 2026-01-23; updated 2026-06-07
+## Author: Freya Olsson
+# Created with R version 4.5.2 (2025-10-31 ucrt)
+#--------------------------------------#
+
+library(tidyverse)
+library(ggpubr)
+library(GGally)
+library(ggh4x)
+
 convert_Pload <- function(before = 0.002, after) {
   
   change <- 100*(before - after)/before
@@ -5,7 +18,120 @@ convert_Pload <- function(before = 0.002, after) {
   return(change)
 }
 
-source('scripts/optim_functions.R')
+source('scripts/R/optim_functions.R')
+# Read in data ------------------------------------------------------------
+setwd(here::here())
+possible_measures <- read_csv('possible_measures.csv')
+
+
+## Rdata output of the optimisation
+rds_files <-  list.files('output', '.RData', full.names = T)
+
+for (input_file in rds_files) {
+  assign(gsub('.RData', '', basename(input_file)),
+         read_rds(input_file))
+}
+
+## Best member of each iteration
+bestmemit <- lapply(list.files('output', 'bestmemit', full.names = TRUE),
+                    read_csv, show_col_types = F)
+names(bestmemit) <- gsub('.csv', '', 
+                         basename(list.files('output', 'bestmemit', full.names = TRUE)))
+
+## Last iteration population, obj_function output
+lastpop <- lapply(list.files('output', 'lastpop_', full.names = TRUE),
+                  read_csv, show_col_types = F)
+names(lastpop) <- gsub('.csv', '', 
+                       basename(list.files('output', 'lastpop_', full.names = TRUE)))
+
+
+## Last iteration population, calculate the state values
+lastpopstate <- lapply(list.files('output', 'lastpopstate_', full.names = TRUE),
+                       read_delim, show_col_types = F)
+names(lastpopstate) <- gsub('.csv', '', 
+                            basename(list.files('output', 'lastpopstate_', full.names = TRUE)))
+
+
+## Last iteration population, state values for the full ts
+lastpoppathways <- lapply(list.files('output', 'lastpoppathways_', full.names = TRUE),
+                          read_csv, show_col_types = F)
+
+names(lastpoppathways) <- gsub('.csv', '', 
+                               basename(list.files('output', 'lastpoppathways_', full.names = TRUE)))
+
+## All populations, obj_function output
+allpop <- lapply(list.files('output', 'allpops_', full.names = TRUE),
+                 read_csv, show_col_types = F)
+
+names(allpop) <- gsub('.csv', '', 
+                      basename(list.files('output', 'allpops_', full.names = TRUE)))
+
+
+# Aesthetics --------------------------------------------------------------
+labels_measures <- c(expression(atop('P load', (gP~m^-2~d^-1))),
+                     expression(atop('P load', (gP~m^-2~d^-1))),
+                     # expression(paste("P load\n(mg ", L^-1, ")")),
+                     # expression(paste("P load\n(mg ", L^-1, ")")), 
+                     expression(atop("Marsh area", "(fraction)")),
+                     expression(atop("Vegetation removed", "(fraction)")),
+                     expression(atop("Day of vegetation", "removal (day of year)")),
+                     "cDredInterval", "cDredStart",
+                     expression(atop("Start P load", "reduction (year)")),
+                     expression(atop("Start P load", "reduction (year)")),
+                     expression(atop("Start marsh", " area (year)")),
+                     expression(atop("Start vegetation", "removal (year)")),
+                     expression(atop("Reduction in P load", "(%)")))
+
+
+
+names(labels_measures) <- c(possible_measures$parameter, "mPLoadEpi_change")
+cols_measures <- c("#3E4A89FF",
+                   "#3E4A89FF",
+                   "#6DCD59FF",
+                   "#F89441FF",
+                   "grey",
+                   "grey", "grey",
+                   "#3E4A89FF",
+                   "#3E4A89FF",
+                   "#6DCD59FF",
+                   "#F89441FF",
+                   "#3E4A89FF")
+
+shapes_measures <- c(16,16,16,16,
+                     1,1, 1,
+                     2,2,2,2,16)
+
+lines_measures <- c(rep('solid',4),
+                    rep('dotted',3),
+                    rep('dashed', 4),
+                    'solid')
+
+cols_states <- c("#C7EF34FF", "#36AAF9FF", "#7A0403FF")
+
+labels_states <- c(oChlaEpi =expression(atop('Chlorophyll-a concentration', (mu*g~L^-1))),
+                   aDSubVeg =expression(atop('Submerged vegetation biomass', (gDW~m^-2))),
+                   aDFish   =expression(atop("Benthivorous fish biomass", (gDW~m^-2))))
+
+labels_states_str <- c(oChlaEpi = "atop('Chlorophyll-a concentration', (mu*g~L^-1))",
+                       aDSubVeg = "atop('Submerged vegetation biomass', (gDW~m^-2))",
+                       aDFish   = "atop('Benthivorous fish biomass', (gDW~m^-2))")
+
+labels_measures_str <- c(mPLoadEpi = "atop('P load', (gP~m^-2~d^-1))",
+                         mPLoadEpi2 = "atop('P load', (gP~m^-2~d^-1))",
+                         fMarsh = "atop('Marsh area', '(fraction)')",
+                         fManVeg = "atop('Vegetation removed', '(fraction)')",
+                         cDayManVeg1 = "atop('Day of vegetation', 'removal (day of year)')",
+                         cDredInterval = 'cDredInterval', cDredStart =  'cDredStart',
+                         mPLoadEpi_lag = "atop('Start P load', 'reduction(year)')",
+                         mPLoadEpi_lag2 = "atop('Start P load', 'reduction (year)')",
+                         fMarsh_lag = "atop('Start marsh', ' area (year)')",
+                         fManVeg_lag = "atop('Start vegetation', 'removal (year)')",
+                         mPLoadEpi_change = "atop('Reduction in P load', '(%)')")
+
+
+
+#
+
 ## Simple example ---------------
 
 simple_ds <- data.frame(opt_var = names(summary_simple$desired_states),
