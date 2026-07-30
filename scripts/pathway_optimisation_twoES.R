@@ -325,7 +325,7 @@ if (save_output) {
   # write every population out
   lapply(opt_pathway$member$storepop, as.data.frame, row.names = F) |> 
     list_rbind(names_to = 'iteration') |> 
-    write_csv(file = file.path(project_location, 'output',  paste0('all_pops',example_name, '.csv')))
+    write_csv(file = file.path(project_location, 'output',  paste0('allpops_',example_name, '.csv')))
 }
 
 ## 7. Re-run last iteration -----------------
@@ -392,7 +392,8 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                        
                        df_pars <- data.frame(variable = name_pars, output = val_pars)
                        
-                       run_pathway(val_pars, name_pars, cur_val) |>
+                       run_pathway(val_pars, name_pars, cur_val,
+                                   initial_conditions = equilibrium_states) |>
                          mutate(year = floor((time-1)/365) + 1,
                                 doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                          filter(year == max(year), # filters to summer in the last year of the simulation
@@ -454,7 +455,8 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                             
                             df_pars <- data.frame(variable = name_pars, output = val_pars)
                             
-                            run_pathway(val_pars, name_pars, cur_val, initial_conditions = equilibrium_states) |> 
+                            run_pathway(val_pars, name_pars, cur_val, 
+                                        initial_conditions = equilibrium_states) |> 
                               mutate(year = floor((time-1)/365) + 1,
                                      doy = yday(as_date(time - (year * 365) + 364, origin = '2025-01-01'))) |> 
                               filter(# filters to summer all years of the simulation
