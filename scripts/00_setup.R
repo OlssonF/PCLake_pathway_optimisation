@@ -38,7 +38,6 @@ dirHome <- str_split(project_location,  "(?=PCModel1350)", simplify = T)[1,1]	# 
 dirShell <- str_split(project_location,  "(?<=PCShell)", simplify = T)[1,1]	#  PCShell folder path
 dirCpp_root <- list.dirs(dirHome)[which(str_detect(list.dirs(dirHome),"3.01/PCLake_plus"))] # location of C++ code
 nameWorkCase <- tail(str_split_1(project_location, "/"), n = 1) # workcase name
-dirSave <- dirShell
 
 # Load PCLake functions from the main repository
 source(file.path(dirShell, "scripts", "R_system", "functions.R"))
@@ -63,6 +62,5 @@ if (copy_datm) {
   message("A DATM file with that name already exists")
 }
 
-fileDATM <- file.path(str_remove(dirShell, "/[^/]+$"), DATM_file)
 
 
