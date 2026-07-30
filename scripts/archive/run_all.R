@@ -1,0 +1,10 @@
+# run all the optimisations one after the other as a background job
+# source('scripts/pathway_optimisation.R')
+setwd(here::here())
+source('scripts/pathway_optimisation_multi.R')
+setwd(here::here())
+source('scripts/pathway_optimisation_prioritisation.R')
+setwd(here::here())
+source('scripts/pathway_optimisation_twoES.R')
+setwd(here::here())
+source('scripts/pathway_optimisation_twohorizon.R')
