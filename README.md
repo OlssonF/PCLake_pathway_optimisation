@@ -16,7 +16,7 @@ This implementation of PCLake uses the DATM file saved in the main PCLake direct
 
 -   This directory only includes the optimisation project files. To actually run the workflow you need a lot more files and set up
 
--   Start with cloning the [PCLake repository](https://github.com/pcmodel/PCModel/) or open a docker container that contains a fixed version of PCLake
+-   Start with cloning the [PCLake repository](https://github.com/pcmodel/PCModel/). You cannot run on docker (or a linux). Windows only.
 
 -   Then clone this project repository into the *workcases* subdirectory for PCShell (R implementation) (./PCModel/Licence_agreement/I_accept/PCModel1350/PCModel/3.00/Models/PCLake+/6.13.16/PCShell/work_cases)
 
