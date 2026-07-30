@@ -40,8 +40,8 @@ dirCpp_root <- list.dirs(dirHome)[which(str_detect(list.dirs(dirHome),"3.01/PCLa
 nameWorkCase <- tail(str_split_1(project_location, "/"), n = 1) # workcase name
 
 # Load PCLake functions from the main repository
-source(file.path(dirShell, "scripts", "R_system", "functions.R"))
-source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.R")) 
+source(file.path(dirShell, "scripts", "R_system", "functions.r"))
+source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.r")) 
 
 # This will copy the relevant source cpp files across from the root dir
 PCModelWorkCaseSetup(dirSHELL = dirShell, 
