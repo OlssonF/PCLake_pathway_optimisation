@@ -62,9 +62,7 @@ source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.r"))
 
 ## 2. Load DATM file  -------------------             
 lDATM_SETTINGS <- PCModelReadDATMFile_PCLakePlus(fileXLS = fileDATM,
-                                                 folderTXT = folderTXT,
                                                  locDATM = "excel",
-                                                 locFORCING = "txt",
                                                  readAllForcings = F)
 ##----------------------------------------#
 
@@ -221,22 +219,36 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   model_output <- run_pathway(val_pars, name_pars, current_val = possible_measures$current_val,
                               initial_conditions = equilibrium_states)
+  # if you want to save the PCLake output you probably want to modify
   
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
                                   eval_year = 'max', # last year evaluation
                                   eval_days = 50:300, # try the spring instead
                                   eval_funs = max,
-                                  eval_target = list(oChlaEpi = range_obj) # see optim_functions.R
+                                  eval_target = list(oChlaEpi = range_obj)) # see optim_functions.R
                                   
-  )
+  report_pathway(val_pars, name_pars, obj_val = eval_output, log_dir = log_dir)
+  
   return(eval_output)
 }
 
 
 ## 6.B Run optimisation ---------------
+log_dir <- tempfile("deoptim_log_")
 
-## Parallelisation with FOREACH package
+# where to save the output from the objective function
+if (dir.exists(log_dir)) {
+  unlink(log_dir, recursive = TRUE)
+  message("Cleaned up log_dir: ", log_dir)
+} else {
+  warning("log_dir is empty or missing — log_dir NOT deleted, check ", log_dir)
+}
+
+# make temp dir
+dir.create(log_dir)
+
+
 {
   nC <- parallelly::availableCores() 
   cl <- makeSOCKcluster(nC-2)
@@ -245,8 +257,9 @@ obj_function <- function(val_pars, name_pars, future_states) {
   clusterExport(cl, list("lDATM_SETTINGS", 'possible_measures', 'equilibrium_states',
                          "PCModelInitializeModel", 
                          "above_obj", "below_obj", "exact_obj", "range_obj",
-                         "dirShell", "nameWorkCase", 'dirHome',
-                         "PCmodelSingleRun", "RunModel", 'run_pathway', 'evaluate_pathway'))
+                         "dirShell", "nameWorkCase", 'dirHome', "log_dir",
+                         "PCmodelSingleRun", "RunModel", 
+                         'run_pathway', 'evaluate_pathway', 'report_pathway'))
   
   doSNOW::registerDoSNOW(cl)
   
@@ -270,7 +283,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
   # 100*reltol is approximately the percent change of the objective value required to consider the parameter set an improvement over the current best member.
   
   set.seed(1234)
-  
+  ## Parallelisation with FOREACH package
   opt_pathway <- DEoptim::DEoptim(lower = possible_measures$lower_bound,
                                   upper = possible_measures$upper_bound, 
                                   fn = obj_function,
@@ -280,6 +293,15 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   parallel::stopCluster(cl)
 }
+
+# Read in the logged objective function output
+log_files <- list.files(log_dir, full.names = TRUE)
+log_list <- lapply(log_files, read.csv)
+log_df <- do.call(rbind, log_list)
+# order by write time (embedded in filename) and chunk into generationslog_df <- log_df[order(files), ]
+NP <-  10 * nrow(possible_measures)
+log_df$iteration <- rep(0:(nrow(log_df)/NP - 1), each = NP)
+
 
 # The output of DEoptim is based on members, iterations, and populations
 # iteration is a generation of a population
