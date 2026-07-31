@@ -239,11 +239,27 @@ obj_function <- function(val_pars, name_pars, future_states) {
                                                      "aDFish" = range_obj) # see optim_functions.R
                                   
   )
+  
+  
+  report_pathway(val_pars, name_pars, obj_val = eval_output, log_dir = log_dir)
+  
   return(eval_output)
 }
 
 
 ## 6.B Run optimisation ---------------
+log_dir <- tempfile("deoptim_log_")
+
+# where to save the output from the objective function
+if (dir.exists(log_dir)) {
+  unlink(log_dir, recursive = TRUE)
+  message("Cleaned up log_dir: ", log_dir)
+} else {
+  warning("log_dir is empty or missing — log_dir NOT deleted, check ", log_dir)
+}
+
+# make temp dir
+dir.create(log_dir)
 
 ## Parallelisation with FOREACH package
 {
@@ -289,6 +305,15 @@ obj_function <- function(val_pars, name_pars, future_states) {
   
   parallel::stopCluster(cl)
 }
+
+# Read in the logged objective function output
+log_files <- list.files(log_dir, full.names = TRUE)
+log_list <- lapply(log_files, read.csv)
+log_df <- do.call(rbind, log_list)
+# order by write time (embedded in filename) and chunk into generationslog_df <- log_df[order(files), ]
+NP <-  10 * nrow(possible_measures)
+log_df$iteration <- rep(0:(nrow(log_df)/NP - 1), each = NP)
+
 
 # The output of DEoptim is based on members, iterations, and populations
 # iteration is a generation of a population
