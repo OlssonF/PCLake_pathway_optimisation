@@ -119,7 +119,7 @@ evaluate_pathway <- function(PCLake_output,
   # For debugging ----------------- #
   # PCLake_output = model_output
   # future_states = desired_states
-  # eval_target = list(function(x,y){(x-y)/y})
+  # eval_target = list(oChlaEpi = range_obj)
   # eval_days = 121:244
   # #--------------------------------#
   
@@ -215,10 +215,42 @@ evaluate_pathway <- function(PCLake_output,
   
   
   out_val <- pathway_error |> pull(total_error)
+  
   return(out_val)
   
 }
 
+
+#' report_pathway outputs
+#'
+#' @param val_pars 
+#' @param name_pars 
+#' @param obj_val 
+#' @param log_dir 
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+report_pathway  <- function(val_pars, 
+                            name_pars, 
+                            obj_val,
+                            log_dir = log_dir) {
+  
+  
+  # Log the results of the objective_function
+  fname <- file.path(log_dir, paste0("eval_", 
+                                     format(Sys.time(), "%Y%m%d%H%M%OS6"), "_",
+                                     Sys.getpid(), "_", paste(sample(letters, 4), collapse=""), ".csv"))
+  report <- data.frame(matrix(val_pars,1,length(name_pars)))
+  colnames(report) <- name_pars
+  
+  write_csv(cbind.data.frame(obj = obj_val,report), fname)
+  
+  # could also log the things that are being evaluated, parameter values
+  
+  
+}
 
 #' range_obj
 #'
