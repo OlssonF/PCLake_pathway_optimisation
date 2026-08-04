@@ -302,7 +302,6 @@ log_df <- do.call(rbind, log_list)
 NP <-  10 * nrow(possible_measures)
 log_df$iteration <- rep(0:(nrow(log_df)/NP - 1), each = NP)
 
-
 # The output of DEoptim is based on members, iterations, and populations
 # iteration is a generation of a population
 # one population is a collection of members
@@ -339,8 +338,12 @@ if (save_output) {
   write_csv(iteration_summary, file = file.path(project_location, 'output',  paste0('bestmemit_',example_name, '.csv'))) # best pathway for each population 
   
   # write every population out
-  lapply(opt_pathway$member$storepop, as.data.frame, row.names = F) |> 
-    list_rbind(names_to = 'iteration') |> 
+  # lapply(opt_pathway$member$storepop, as.data.frame, row.names = F) |> 
+  #   list_rbind(names_to = 'iteration') |> 
+  #   write_csv(file = file.path(project_location, 'output',  paste0('allpops_',example_name, '.csv')))
+  
+  # instead use the log
+  log_df |> 
     write_csv(file = file.path(project_location, 'output',  paste0('allpops_',example_name, '.csv')))
 }
 
