@@ -19,7 +19,7 @@ library(ggh4x)
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
 make_plots <- FALSE
-example_name <- 'multiES_mega'
+example_name <- 'multiES_mega_new'
 
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases
@@ -62,9 +62,7 @@ source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.r"))
 
 ## 2. Load DATM file  -------------------             
 lDATM_SETTINGS <- PCModelReadDATMFile_PCLakePlus(fileXLS = fileDATM,
-                                                 folderTXT = folderTXT,
                                                  locDATM = "excel",
-                                                 locFORCING = "txt",
                                                  readAllForcings = F)
 ##----------------------------------------#
 
@@ -151,9 +149,9 @@ if(sum(str_detect(possible_measures$parameter, '_lag')) > 0){
 # Define the desired future state(s)
 desired_states_df <- data.frame(opt_var = c('oChlaEpi', 'aDSubVeg', 'aDFish'),
                                 lower_range = c(0, 30, 6),
-                                upper_range = c(55, 50, 8))
+                                upper_range = c(20, 50, 8))
 
-desired_states <- list(oChlaEpi = list(target = c(0,55),
+desired_states <- list(oChlaEpi = list(target = c(0,20),
                                        weights = 1/3),
                        aDSubVeg = list(target = c(30, 50),
                                        weights = 1/3),
@@ -168,6 +166,9 @@ lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% names(desired_states))] <- 1 # report optim vars
 lDATM_SETTINGS$params$iReport[which(rownames(lDATM_SETTINGS$params) %in% possible_measures$parameter)]  # report measure params
 lDATM_SETTINGS$auxils[which(rownames(lDATM_SETTINGS$auxils) %in% 'uPLoadEpi'), ] <- 1 # also report the auxillary variable for the PLoadEpi
+
+# make sure the pathway is for 30 years
+lDATM_SETTINGS$run_settings['dReady',] <- 30
 
 # forcing variables --------------#
 # anything that is being lagged needs to be in the forcings before compilation
@@ -233,7 +234,9 @@ obj_function <- function(val_pars, name_pars, future_states) {
   eval_output <- evaluate_pathway(PCLake_output = model_output, 
                                   future_states = future_states,
                                   eval_days = 50:300, 
-                                  eval_funs = mean,
+                                  eval_funs = list("oChlaEpi" = max,
+                                                   "aDSubVeg" = mean,
+                                                   "aDFish" = mean),
                                   eval_target = list("oChlaEpi" = range_obj,
                                                      "aDSubVeg" = range_obj,
                                                      "aDFish" = range_obj) # see optim_functions.R
@@ -270,8 +273,9 @@ dir.create(log_dir)
   clusterExport(cl, list("lDATM_SETTINGS", 'possible_measures', 'equilibrium_states',
                          "PCModelInitializeModel", 
                          "above_obj", "below_obj", "exact_obj", "range_obj",
-                         "dirShell", "nameWorkCase", 'dirHome',
-                         "PCmodelSingleRun", "RunModel", 'run_pathway', 'evaluate_pathway'))
+                         "dirShell", "nameWorkCase", 'dirHome', "log_dir",
+                         "PCmodelSingleRun", "RunModel", 
+                         'run_pathway', 'evaluate_pathway', 'report_pathway'))
   
   doSNOW::registerDoSNOW(cl)
   
@@ -348,9 +352,13 @@ if (save_output) {
             file = file.path(project_location, 'output', paste0('summary_',example_name, '.RData'))) # summary of the optimisation example
   write_csv(iteration_summary, file = file.path(project_location, 'output',  paste0('bestmemit_',example_name, '.csv'))) # best pathway for each population
   
-  # write every population out
-  lapply(opt_pathway$member$storepop, as.data.frame, row.names = F) |> 
-    list_rbind(names_to = 'iteration') |> 
+   # write every population out
+  # lapply(opt_pathway$member$storepop, as.data.frame, row.names = F) |> 
+  #   list_rbind(names_to = 'iteration') |> 
+  #   write_csv(file = file.path(project_location, 'output',  paste0('allpops_',example_name, '.csv')))
+  
+  # instead use the log
+  log_df |> 
     write_csv(file = file.path(project_location, 'output',  paste0('allpops_',example_name, '.csv')))
 }
 

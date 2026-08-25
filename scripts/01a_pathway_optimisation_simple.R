@@ -225,7 +225,7 @@ obj_function <- function(val_pars, name_pars, future_states) {
                                   future_states = future_states,
                                   eval_year = 'max', # last year evaluation
                                   eval_days = 50:300, # try the spring instead
-                                  eval_funs = max,
+                                  eval_funs = list(oChlaEpi = max),
                                   eval_target = list(oChlaEpi = range_obj)) # see optim_functions.R
                                   
   report_pathway(val_pars, name_pars, obj_val = eval_output, log_dir = log_dir)
