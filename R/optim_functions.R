@@ -113,7 +113,7 @@ evaluate_pathway <- function(PCLake_output,
                              future_states,
                              eval_target = list(function(out,target){abs(out-target)/target}),
                              eval_days = 121:244,
-                             eval_funs = mean,
+                             eval_funs, # need to provide a named function
                              eval_year = 'max') {
   
   # For debugging ----------------- #
@@ -155,7 +155,7 @@ evaluate_pathway <- function(PCLake_output,
     filter(year == eval_year, # filters to summer in the last year of the simulation
            doy %in% eval_days) |> 
     select(names(future_states)) |> 
-    summarise(across(any_of(names(future_states)), eval_funs)) |> 
+    summarise(across(any_of(names(future_states)),~ eval_funs[[cur_column()]](.x))) |>
     pivot_longer(cols = any_of(names(future_states)),
                  names_to = 'variable',
                  values_to = 'output')
