@@ -18,8 +18,7 @@ library(ggh4x)
 ## Global settings
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
-make_plots <- FALSE
-example_name <- 'multiES_mega_new'
+example_name <- 'multiES_constrained'
 
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases
@@ -334,17 +333,6 @@ n_iter <- opt_pathway$optim$iter
 iteration_summary <- as.data.frame(opt_pathway$member$bestmemit) |>
   mutate(fn_out = opt_pathway$member$bestvalit[1:n_iter])
 
-if (make_plots) {
-  p1 <- ggplot(iteration_summary, aes(x=fManVeg_lag, y= fManVeg, size = mPLoadEpi, colour = fn_out)) +
-    geom_point() +
-    scale_color_viridis_c()  +
-    theme_bw()
-  if (save_output) {
-    ggsave(plot = p1, filename = file.path(project_location, 'output', 'plots', paste0('bestmemit_', example_name, '.png')), 
-           width = 10, height = 8, unit = 'cm')
-  }
-}
-
 
 # write output for later?------------------------------
 if (save_output) {
@@ -399,19 +387,6 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                  }
 
 
-if (make_plots) {
-  p2 <- last_iteration |> 
-    # filter(fn_out == 0) |> 
-    ggplot(aes(x=fManVeg_lag, y= fManVeg, size = mPLoadEpi_lag, colour = fn_out)) + 
-    geom_point() + 
-    scale_colour_viridis_c() +
-    theme_bw()
-  if (save_output) {
-    ggsave(plot = p2, filename = file.path(project_location, 'output', 'plots', paste0('lastpop_', example_name, '.png')), 
-           width = 12, height = 9, unit = 'cm')
-  }
-}
-
 ### 7.b Extract the state values -----------
 # what are the values of the optimised variables?
 state_opt <- foreach(i = 1:nrow(last_iteration),
@@ -423,7 +398,9 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                        val_pars <- last_iteration[i,possible_measures$parameter] |> unlist()
                        cur_val <- possible_measures$current_val
                        name_pars <- last_iteration[i,possible_measures$parameter] |> names()
-                       
+                       eval_funs <- list("oChlaEpi" = max,
+                                         "aDSubVeg" = mean,
+                                         "aDFish" = mean)
                        df_pars <- data.frame(variable = name_pars, output = val_pars)
                        
                        run_pathway(val_pars, name_pars, cur_val,
@@ -433,7 +410,8 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                          filter(year == max(year), # filters to summer in the last year of the simulation
                                 doy %in% 50:300) |> 
                          select(names(desired_states)) |> 
-                         summarise(across(any_of(names(desired_states)), mean)) |> 
+                         # summarise(across(any_of(names(desired_states)), mean)) |>
+                         summarise(across(any_of(names(desired_states)),~ eval_funs[[cur_column()]](.x))) |> # match summary by column name
                          pivot_longer(cols = any_of(names(desired_states)),
                                       names_to = 'variable',
                                       values_to = 'output') |> 
@@ -441,25 +419,6 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                          mutate(ID = i)
                        
                      }
-
-
-if (make_plots) {
-    p3 <- state_opt |> 
-    pivot_wider(id_cols = ID, names_from = variable, values_from = output) |>
-    pivot_longer(cols = names(desired_states), names_to = 'opt_var', values_to = 'out') |> 
-    # full_join(desired_states_df, by = join_by(opt_var)) |> 
-    # filter(between(out, lower_range, upper_range)) |> # check within range
-    # filter(n() == nrow(desired_states_df), .by = ID) |> # only where both states pass
-    ggplot(aes(x=mPLoadEpi, y = fManVeg_lag, size = fManVeg, colour = mPLoadEpi_lag)) + geom_point() +
-    facet_wrap(~opt_var, scales = 'free') +
-    scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
-    theme_bw()
-  
-  if (save_output) {
-    ggsave(plot = p3, filename = file.path(project_location, 'output', 'plots', paste0('lastpopstate_', example_name, '.png')), 
-           width = 12, height = 8, unit = 'cm')
-  }
-}
 
 
 
@@ -487,6 +446,10 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                             cur_val <- possible_measures$current_val
                             name_pars <- last_iteration[i,possible_measures$parameter] |> names()
                             
+                            eval_funs <- list("oChlaEpi" = max,
+                                              "aDSubVeg" = mean,
+                                              "aDFish" = mean)
+                            
                             df_pars <- data.frame(variable = name_pars, output = val_pars)
                             
                             run_pathway(val_pars, name_pars, cur_val, 
@@ -497,65 +460,12 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                                 doy %in% 50:300) |> 
                               select(c('year', names(desired_states))) |> 
                               group_by(year) |> 
-                              summarise(across(any_of(names(desired_states)), mean)) |> 
+                              # summarise(across(any_of(names(desired_states)), mean)) |>
+                              summarise(across(any_of(names(desired_states)),~ eval_funs[[cur_column()]](.x))) |> # match summary by column name
                               bind_cols(pivot_wider(df_pars, names_from = variable, values_from = output)) |>  
                               mutate(ID = i)
                             
                           }
-
-
-
-if (make_plots) {
-  p4 <- state_pathways |> 
-    filter(year == max(state_pathways$year),
-           oChlaEpi <= 20,
-           between(aDSubVeg, 50, 100),
-           between(aDFish, 6, 8)) |> 
-    select(ID) |> 
-    left_join(state_pathways, by = join_by(ID)) |> 
-    mutate(.by = year, ID = row_number()) |> # renumber the pathways 
-    mutate(fManVeg_use = ifelse(fManVeg_lag < year, fManVeg, 0),
-           mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, possible_measures$current_val[which(possible_measures$parameter == 'mPLoadEpi')]))  |> 
-    select(all_of(c('ID', 'year', 'aDSubVeg', 'oChlaEpi', 'mPLoadEpi_use', 'fManVeg_use'))) |> 
-    pivot_longer(cols = !any_of(c('ID','year'))) |> 
-    # filter(ID %in% 7:9) |>
-    ggplot(aes(x=year, y = value, 
-               # size = value, 
-               colour = name)) +
-    geom_line(lineend = 'round', linejoin = 'round', linemitre = 1, linewidth = 1) +
-    ggh4x::facet_nested_wrap(vars(ID, name), scales = 'free_y',  nrow = 20, 
-                             strip.position = 'right', dir = 'v', remove_labels = 'y',
-                             nest_line = element_line(colour = 'black'), 
-                             strip = strip_nested(text_y = list(element_text(), 
-                                                                element_text(colour = 'white', 
-                                                                             size = 1)),
-                                                  background_y = list(element_rect(),
-                                                                      element_blank()), 
-                                                  by_layer_y = TRUE)) +
-    theme_bw(base_size = 12) +
-    theme(panel.border = element_rect(colour = 'black'),
-          legend.position = 'top',
-          panel.spacing.y = unit(c( rep( c( rep(0.2,4), 0.6), 3), rep(0.2,4)),
-                                 "lines")
-    ) +
-    facetted_pos_scales(y = list(name == "fManVeg_use" ~ scale_y_continuous(limits = c(0,1),
-                                                                           n.breaks = 2),
-                                 name == "mPLoadEpi_use" ~ scale_y_continuous(limits = c(0,0.01),
-                                                                              n.breaks = 2),
-                                 name == "oChlaEpi" ~ scale_y_continuous(limits = c(0,200),
-                                                                         n.breaks = 2),
-                                 name == "aDSubVeg" ~ scale_y_continuous(limits = c(0,100),
-                                                                         n.breaks = 2)
-                                 
-    )
-    ) +
-    scale_colour_manual(values = c('black', 'orange','seagreen', 'orchid', 'grey'))
-  if (save_output) {
-    ggsave(plot = p4, filename = file.path(project_location, 'output', 'plots', paste0('lastpoppathways_', example_name, '.png')), 
-           height = 20, width = 30, units = 'cm')
-  }
-}
-
 
 
 if (save_output) {
