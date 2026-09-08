@@ -146,10 +146,6 @@ if(sum(str_detect(possible_measures$parameter, '_lag')) > 0){
 ### b. Define the desired future ------------------
 # What is the objective
 # Define the desired future state(s)
-desired_states_df <- data.frame(opt_var = c('oChlaEpi', 'aDSubVeg', 'aDFish'),
-                                lower_range = c(0, 30, 6),
-                                upper_range = c(20, 50, 8))
-
 desired_states <- list(oChlaEpi = list(target = c(0,20),
                                        weights = 1/3),
                        aDSubVeg = list(target = c(30, 50),

@@ -18,7 +18,6 @@ library(ggh4x)
 ## Global settings
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
-make_plots <- FALSE
 example_name <- 'simple'
 
 ## 1. Directory settings ---------------------------------------------------------
@@ -142,9 +141,6 @@ if(sum(str_detect(possible_measures$parameter, '_lag')) > 0){
 ### b. Define the desired future ------------------
 # What is the objective
 # Define the desired future state(s)
-desired_states_df <- data.frame(opt_var = c('oChlaEpi'),
-                                lower_range = c(0),
-                                upper_range = c(20))
 desired_states <- list(oChlaEpi = list(target = c(0,20),
                                        weights = 1))
 
@@ -317,19 +313,6 @@ n_iter <- opt_pathway$optim$iter
 iteration_summary <- as.data.frame(opt_pathway$member$bestmemit) |>
   mutate(fn_out = opt_pathway$member$bestvalit[1:n_iter])
 
-if (make_plots) {
-  p1 <- iteration_summary |> 
-    filter(fn_out <=0) |> 
-    ggplot(aes(x= mPLoadEpi, y = mPLoadEpi_lag)) +
-    geom_point() +
-    scale_color_viridis_c()  +
-    theme_bw()
-  if (save_output) {
-    ggsave(plot = p1, filename = file.path(project_location, 'output', 'plots', paste0('bestmemit_', example_name, '.png')), 
-           width = 10, height = 8, unit = 'cm')
-  }
-}
-
 
 # write output for later?------------------------------
 if (save_output) {
@@ -384,19 +367,6 @@ last_iteration$fn_out <- foreach(i = 1:nrow(last_iteration),
                                  }
 
 
-if (make_plots) {
-  p2 <- last_iteration |> 
-    # slice_min(fn_out, prop = 0.5) |> # best (lowest) 25% of values
-    ggplot(aes(x = mPLoadEpi, y = mPLoadEpi_lag)) + 
-    geom_point() + 
-    scale_colour_viridis_c() +
-    theme_bw()
-  if (save_output) {
-    ggsave(plot = p2, filename = file.path(project_location, 'output', 'plots', paste0('lastpop_', example_name, '.png')), 
-           width = 12, height = 9, unit = 'cm')
-  }
-}
-
 ### 7.b Extract the state values -----------
 # what are the values of the optimised variables?
 state_opt <- foreach(i = 1:nrow(last_iteration),
@@ -425,26 +395,6 @@ state_opt <- foreach(i = 1:nrow(last_iteration),
                          mutate(ID = i)
                        
                      }
-
-
-if (make_plots) {
-  p3 <- state_opt |> 
-    pivot_wider(id_cols = ID, names_from = variable, values_from = output) |>
-    pivot_longer(cols = names(desired_states), names_to = 'opt_var', values_to = 'out') |> 
-    full_join(desired_states_df, by = join_by(opt_var)) |> 
-    filter(between(out, lower_range, upper_range)) |> # check within range
-    filter(n() == nrow(desired_states_df), .by = ID) |> # only where both states pass
-    ggplot(aes(x=mPLoadEpi, y = out, colour = mPLoadEpi_lag)) + geom_point() +
-    facet_wrap(~opt_var, scales = 'free') +
-    scale_colour_viridis_c(option = 'A', begin = 0.3, end = 0.9) +
-    theme_bw()
-  
-  if (save_output) {
-    ggsave(plot = p3, filename = file.path(project_location, 'output', 'plots', paste0('lastpopstate_', example_name, '.png')), 
-           width = 12, height = 8, unit = 'cm')
-  }
-}
-
 
 
 if (save_output) {
@@ -485,54 +435,6 @@ state_pathways <- foreach(i = 1:nrow(last_iteration),
                               mutate(ID = i)
                             
                           }
-
-
-
-if (make_plots) {
-  p4 <- state_pathways |> 
-    filter(year == max(state_pathways$year),
-           oChlaEpi <= 20) |> 
-    select(ID) |> 
-    left_join(state_pathways, by = join_by(ID)) |> 
-    mutate(.by = year, ID = row_number()) |> # renumber the pathways 
-    mutate(#fMarsh_use = ifelse(fMarsh_lag < year, fMarsh, 0),
-           mPLoadEpi_use = ifelse(mPLoadEpi_lag < year, mPLoadEpi, 0.01))  |> 
-    select(all_of(c('ID', 'year', 'oChlaEpi', 'mPLoadEpi_use'))) |> 
-    pivot_longer(cols = !any_of(c('ID','year'))) |> 
-    # filter(ID %in% 7:9) |>
-    ggplot(aes(x=year, y = value, 
-               # size = value, 
-               colour = name)) +
-    geom_line(lineend = 'round', linejoin = 'round', linemitre = 1, linewidth = 1) +
-    ggh4x::facet_nested_wrap(vars(ID, name), scales = 'free_y',  nrow = 18, 
-                             strip.position = 'right', dir = 'v', remove_labels = 'y',
-                             nest_line = element_line(colour = 'black'), 
-                             strip = strip_nested(text_y = list(element_text(), 
-                                                                element_text(colour = 'white', 
-                                                                             size = 1)),
-                                                  background_y = list(element_rect(),
-                                                                      element_blank()), 
-                                                  by_layer_y = TRUE)) +
-    theme_bw(base_size = 12) +
-    theme(panel.border = element_rect(colour = 'black'),
-          legend.position = 'top',
-          panel.spacing.y = unit(c( rep( c( rep(0.2,2), 0.6), 5), rep(0.2,2)), "lines")
-    ) +
-    facetted_pos_scales(y = list(name == "fMarsh_use" ~ scale_y_continuous(limits = c(0,1),
-                                                                           n.breaks = 2),
-                                 name == "mPLoadEpi_use" ~ scale_y_continuous(limits = c(0,0.01),
-                                                                              n.breaks = 2),
-                                 name == "oChlaEpi" ~ scale_y_continuous(limits = c(0,200),
-                                                                         n.breaks = 2)
-    )
-    ) +
-    scale_colour_manual(values = c('black', 'orange', 'orchid', 'grey'))
-  if (save_output) {
-    ggsave(plot = p4, filename = file.path(project_location, 'output', 'plots', paste0('lastpoppathways_', example_name, '.png')), 
-           height = 20, width = 30, units = 'cm')
-  }
-}
-
 
 
 if (save_output) {
