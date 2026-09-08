@@ -304,3 +304,11 @@ above_obj <- function(out,target){ # above better
     (target-out)/target
   }     
 }
+
+
+convert_Pload <- function(before = 0.002, after) {
+  
+  change <- 100*(before - after)/before
+  
+  return(change)
+}
