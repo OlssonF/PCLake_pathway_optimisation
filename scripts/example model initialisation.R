@@ -17,24 +17,25 @@ library(here)
 options(scipen = 999) ## no scientific notation
 save_output <- TRUE
 make_plots <- TRUE
-example_name <- 'single'
+example_name <- 'simple'
 ## 1. Directory settings ---------------------------------------------------------
 ## using relative paths in which the project and script is saved in the work_cases
 ## "scripts" contains only the PCLake functions
 
 project_location <- here()
+DATM_file <- "PL613162PLUS_pathway_optim.xls"
+
 dirHome <- str_split(project_location,  "(?=PCModel1350)", simplify = T)[1,1]	# location of the PCModel1350 folder
 dirShell <- str_split(project_location,  "(?<=PCShell)", simplify = T)[1,1]	#  PCShell folder path
 dirCpp_root <- list.dirs(dirHome)[which(str_detect(list.dirs(dirHome),"3.01/PCLake_plus"))] # location of C++ code
 nameWorkCase <- tail(str_split_1(project_location, "/"), n = 1) # workcase name
-fileDATM <- list.files(list.dirs(dirHome)[which(str_detect(list.dirs(dirHome), "PCLake\\+/6.13.16"))], "PL613162PLUS_pathway_optim.xls", full.names = T)
-folderTXT <- file.path(project_location, 'input', 'drivers_txt')
+fileDATM <- file.path(str_remove(dirShell, "/[^/]+$"), DATM_file)
 dirSave <- dirShell
 # ----------------------------------------------------------------------------- #
 
 ## load external functions from the scripts folder
-source(file.path(dirShell, "scripts", "R_system", "functions.R"))
-source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.R")) 
+source(file.path(dirShell, "scripts", "R_system", "functions.r"))
+source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.r")) 
 
 
 ## Order of actions to run PCLake in R
@@ -58,9 +59,7 @@ source(file.path(dirShell, "scripts", "R_system", "functions_PCLake.R"))
 
 ## 2. Load DATM file  -------------------             
 lDATM_SETTINGS <- PCModelReadDATMFile_PCLakePlus(fileXLS = fileDATM,
-                                                 folderTXT = folderTXT,
                                                  locDATM = "excel",
-                                                 locFORCING = "txt",
                                                  readAllForcings = F)
 ##----------------------------------------#
 
@@ -68,9 +67,8 @@ lDATM_SETTINGS <- PCModelReadDATMFile_PCLakePlus(fileXLS = fileDATM,
 ## Might be a good idea to make sure the default lake parameters are loaded
 
 # Report restart variables
-restart_states <- read_table(file.path(project_location, 'restart_states.txt'), col_names = 'state', show_col_types = F)
+restart_states <- read_table(file.path(project_location,'input', 'restart_states.txt'), col_names = 'state', show_col_types = F)
 lDATM_SETTINGS$auxils$iReport[which(rownames(lDATM_SETTINGS$auxils) %in% restart_states$state)] <- 1 # report these in the output
-
 
 ## 3.4.A Make and adjust cpp files ----------       
 #  - nRUN_SET determines which forcings are switched on
@@ -112,11 +110,11 @@ names(vars_plot) <- NULL
 library(ggplot2)
 
 df_labels <- data.frame(variable = vars_plot ) |> 
-  mutate(facet_label = c("Epilimnion~Chlorophyll-a~ concentration ~ (mu*g ~ L^{-1})",
+  mutate(facet_label = c("Epilimnion~chlorophyll~a~concentration ~ (mu*g ~ L^{-1})",
                          'Epilimnion~total~phosphorus~concentration~(g~m^{-3})',
                          'Secchi~depth~(m)'))
 
-ggpubr::ggarrange(PCModel_run_baseline |> 
+figureS1 <- ggpubr::ggarrange(PCModel_run_baseline |> 
                     select(all_of(c('time', vars_plot))) |> 
                     pivot_longer(cols = -time, 
                                  names_to = 'variable',
@@ -144,5 +142,7 @@ ggpubr::ggarrange(PCModel_run_baseline |>
                     theme_bw(base_size = 14) +
                     scale_x_continuous(name = 'day of year'),
                   
-                  ncol = 2, widths = c(1, 0.5))
+                  ncol = 2, widths = c(1, 0.7))
+ggsave(figureS1, filename = file.path(here::here(), 'output/plots/ms/FigureS1.png'),
+         height = 16, width = 27, units = 'cm')
 
