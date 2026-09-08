@@ -8,7 +8,6 @@
 
 library(tidyverse)
 library(ggpubr)
-library(GGally)
 library(ggh4x)
 
 source('R/optim_functions.R')
@@ -253,11 +252,11 @@ example_p3 <- example_runs |>
   geom_hline(aes(yintercept = upper_range), linetype = 'dashed') 
 
 # arrange and save
-ggarrange(ggarrange(allpop_p1, allpop_p2, widths = c(0.6,1), labels = c('A)', 'B)')),
+fig2 <- ggarrange(ggarrange(allpop_p1, allpop_p2, widths = c(0.6,1), labels = c('A)', 'B)')),
           ggarrange(NULL, example_p3, NULL, widths = c(0.1,1, 0.1), ncol = 3, 
                     labels = c('', 'C)', '')),
-          nrow = 2, heights = c(1,1)) + 
-  ggsave(filename = 'output/plots/ms/Figure2.jpg', height = 20, width = 20, units = 'cm')
+          nrow = 2, heights = c(1,1))
+ggsave(fig2, filename = 'output/plots/ms/Figure2.jpg', height = 20, width = 20, units = 'cm')
 
 
 # Figure 3 - correlations among measures ---------------
@@ -536,7 +535,10 @@ cv_evo <- ggarrange(allpop$allpops_multiES_constrained |>
                       scale_x_continuous(limits = c(0,50), name = 'Iteration') +
                       scale_y_continuous(limits = c(0.15,0.8), name = 'CV'),
                     nrow = 2, common.legend = T, labels = c('A)', 'B)'), vjust = 0, hjust = -0.5
-) + ggsave(filename = 'output/plots/ms/FigureS3.jpg', height = 15, width = 15, units = 'cm')
+)
+
+ggsave(cv_evo,
+       filename = 'output/plots/ms/FigureS3.jpg', height = 15, width = 15, units = 'cm')
 
 
 ## Figure S4 - successful pathways compromise ------------
