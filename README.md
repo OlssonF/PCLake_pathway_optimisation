@@ -20,18 +20,18 @@ This implementation of PCLake uses the DATM file saved in the main PCLake direct
 
 - Then clone this project repository into the *workcases* subdirectory for PCShell (R implementation) (./PCModel/Licence_agreement/I_accept/PCModel1350/PCModel/3.00/Models/PCLake+/6.13.16/PCShell/work_cases)
 
-- Then open the R project (PCLake_pathway_optimisation.Rproj)
+- Then open the R project (`PCLake_pathway_optimisation.Rproj`)
 
 ## Running the optimisation examples
 
-1.  scripts/00_setup.R organises the workcase folder - you should only do this if you have cloned the PCLake repo first and then cloned this directory into the. This script will:
+1.  `scripts/00_setup.R` organises the workcase folder - you should only do this if you have cloned the PCLake repo first and then cloned this directory into the. This script will:
 
-- copy the DATM file to the right location (./PCModel/Licence_agreement/I_accept/PCModel1350/PCModel/3.00/Models/PCLake+/6.13.16/) and
+- copy the DATM file to the right location (`./PCModel/Licence_agreement/I_accept/PCModel1350/PCModel/3.00/Models/PCLake+/6.13.16/`) and
 - set up all the cpp, model_code folders etc.
 - You only need to do this once!
 
-3.  scripts/01a_pathway_optimisation_simple.R, scripts/01b_pathway_optimisation_multi.R, scripts/01c_pathway_optimisation_multi_compromise.R are the three scripts for generating the example cases from Olsson et al., 2026 (submitted to JEM).
-4.  scripts/02_analysis.R is for generating the plots and values found in the manuscript.
-5.  scripts/example_model_initialisation.R is a script that runs the initialisation step (long PCLake run) to generate "initial conditions" for optimisation run. Figure is for the SI.
-6.  R/optim_functions.R contains some custom functions that help to run the model and evaluate output.
-7.  scripts/archive/ contains scripts that were not used in the paper but other implementations of the framework (e.g. robust, prioritisation, two horizons etc). DO NOT USE AS IS, it probably won't work.
+3.  `scripts/01a_pathway_optimisation_simple.R`, `scripts/01b_pathway_optimisation_multi.R`, `scripts/01c_pathway_optimisation_multi_compromise.R` are the three scripts for generating the example cases from Olsson et al., 2026 (submitted to JEM).
+4.  `scripts/02_analysis.R` is for generating the plots and values found in the manuscript.
+5.  `scripts/example_model_initialisation.R` is a script that runs the initialisation step (long PCLake run) to generate "initial conditions" for optimisation run. Figure is for the SI.
+6.  `R/optim_functions.R` contains some custom functions that help to run the model and evaluate output.
+7.  `scripts/archive/` contains scripts that were not used in the paper but other implementations of the framework (e.g. robust, prioritisation, two horizons etc). DO NOT USE AS IS, it probably won't work.
