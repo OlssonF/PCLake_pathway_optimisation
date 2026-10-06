@@ -165,6 +165,7 @@ allpop_p2 <- allpop$allpops_simple |>
   geom_label(data = ~ subset(.x, example == TRUE),
              aes(label = c('B-2', 'B-1')),
              label.size = 0.2, nudge_y = 3,
+             colour = 'black', 
              nudge_x =1, 
              fill = "white")+
   scale_shape_manual(values = c(19, 1, 4)) +
