@@ -366,7 +366,7 @@ f5_p1 <-
   facet_wrap(~opt_var, scales= 'free', nrow = 3,
              labeller = labeller(opt_var = as_labeller(labels_states_str, label_parsed))) +
   theme_bw()  +
-  scale_x_continuous(name = 'Absolute distance to target') +
+  scale_x_continuous(name = 'Absolute normalised distance to target') +
   scale_y_discrete(labels = c('Chla only', 'Macrophytes\nonly', 'Fish\nonly', 'Chla +\nMacrophytes', "Chla +\nFish", 'All'),
                    breaks = c(1, 2, 4, 3, 5, 7),
                    name = "Attribute target achieved") +
@@ -429,7 +429,8 @@ f5_p2 <- lastpop$lastpop_multiES_constrained |>
   theme(panel.border = element_rect(colour = 'black'),
         legend.position = 'top',
         legend.title = element_text(hjust = 0.5),
-        panel.spacing.y = unit(c( rep( c( rep(0.2, 2), 0.8), ), rep(0.2, 2)),"lines"))
+        legend.key.spacing.y  = unit(0.5, 'cm'),
+        panel.spacing.y = unit(c( rep( c( rep(0.2, 2), 0.2), ), rep(0.2, 2)),"lines"))
 
 figure5 <- cowplot::plot_grid(f5_p1,                  
                               f5_p2, 
@@ -664,7 +665,8 @@ lastpop$lastpop_multiES_constrained |>
 # how many in each group?
 target_check_multiES_constrained |> 
   distinct(ID, ind_ID) |> 
-  reframe(.by = ind_ID, n = n())
+  reframe(.by = ind_ID,
+          n = n())
 
 target_check_multiES_compromise |> 
   distinct(ID, ind_ID) |> 
